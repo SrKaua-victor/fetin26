@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>BusTrack — Simulador de Motorista</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+    body { background: #0a0e1a; color: #f0f4ff; padding: 40px; min-height: 100vh; }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    p.subtitle { color: #8895b3; font-size: 13px; margin-bottom: 24px; }
+    label { display: block; margin-top: 16px; font-size: 12px; color: #8895b3; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+    input, select, button { width: 100%; padding: 10px 14px; margin-top: 6px; background: #1a2236; color: #f0f4ff; border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; font-size: 14px; }
+    button { background: #FF6B35; border: none; font-weight: 700; margin-top: 20px; cursor: pointer; transition: opacity 0.15s; }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { margin-top: 20px; padding: 16px; background: #111827; border-radius: 10px; font-size: 13px; }
+    .status strong { color: #FF6B35; }
+    .log { margin-top: 16px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #8895b3; }
+    .log div { padding: 2px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚌 Simulador de Motorista</h1>
+    <p class="subtitle">Simula o app do motorista enviando GPS para o servidor em tempo real.</p>
+
+    <label>Nome do motorista</label>
+    <input id="driverName" value="João Silva" />
+
+    <label>Rota</label>
+    <select id="routeSelect"></select>
+
+    <label>Intervalo (ms)</label>
+    <input id="interval" type="number" value="1000" />
+
+    <button id="startBtn">Iniciar percurso</button>
+    <button id="stopBtn" style="background:#ef4444; margin-top:8px" disabled>Parar</button>
+
+    <div class="status">
+      <div>Status: <strong id="status">Desconectado</strong></div>
+      <div>Posição atual: <span id="pos">—</span></div>
+      <div>Velocidade: <span id="speed">0</span> km/h</div>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const SERVER = "http://localhost:3001";
+    const socket = io(SERVER, { transports: ["websocket"] });
+
+    let interval = null;
+    let pathIndex = 0;
+    let routes = [];
+    let currentRoute = null;
+
+    const $status = document.getElementById("status");
+    const $pos = document.getElementById("pos");
+    const $speed = document.getElementById("speed");
+    const $log = document.getElementById("log");
+    const $start = document.getElementById("startBtn");
+    const $stop = document.getElementById("stopBtn");
+
+    function log(msg) {
+      const d = document.createElement("div");
+      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      $log.prepend(d);
+    }
+
+    socket.on("connect", () => {
+      $status.textContent = "Conectado";
+      log("Conectado ao servidor");
+    });
+
+    socket.on("disconnect", () => {
+      $status.textContent = "Desconectado";
+      log("Desconectado");
+    });
+
+    socket.on("init", ({ routes: r }) => {
+      routes = r;
+      const sel = document.getElementById("routeSelect");
+      sel.innerHTML = r.map(route => `<option value="${route.id}">${route.name}</option>`).join("");
+      log(`${r.length} rotas carregadas`);
+    });
+
+    // Interpola entre dois pontos
+    function interpolate(a, b, t) {
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+
+    // Distância aproximada em metros (haversine simplificado)
+    function distanceMeters(a, b) {
+      const R = 6371000;
+      const dLat = (b[0] - a[0]) * Math.PI / 180;
+      const dLng = (b[1] - a[1]) * Math.PI / 180;
+      const lat1 = a[0] * Math.PI / 180;
+      const lat2 = b[0] * Math.PI / 180;
+      const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+      return 2 * R * Math.asin(Math.sqrt(x));
+    }
+
+    // Bearing entre dois pontos (graus, 0 = norte)
+    function bearing(a, b) {
+      const lat1 = a[0] * Math.PI / 180;
+      const lat2 = b[0] * Math.PI / 180;
+      const dLng = (b[1] - a[1]) * Math.PI / 180;
+      const y = Math.sin(dLng) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+      return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+    }
+
+    $start.addEventListener("click", () => {
+      const driverName = document.getElementById("driverName").value;
+      const routeId = document.getElementById("routeSelect").value;
+      const intervalMs = parseInt(document.getElementById("interval").value);
+
+      currentRoute = routes.find(r => r.id === routeId);
+      if (!currentRoute || !currentRoute.path.length) {
+        alert("Selecione uma rota com traçado válido");
+        return;
+      }
+
+      socket.emit("driver:register", { driverName, routeId });
+      log(`Registrado como ${driverName} na rota ${currentRoute.name}`);
+
+      $start.disabled = true;
+      $stop.disabled = false;
+
+      // Expande o traçado para movimento suave (interpola 20 passos entre cada par de pontos)
+      const expanded = [];
+      for (let i = 0; i < currentRoute.path.length - 1; i++) {
+        for (let t = 0; t < 1; t += 0.05) {
+          expanded.push(interpolate(currentRoute.path[i], currentRoute.path[i+1], t));
+        }
+      }
+      expanded.push(currentRoute.path[currentRoute.path.length - 1]);
+
+      pathIndex = 0;
+
+      interval = setInterval(() => {
+        if (pathIndex >= expanded.length) pathIndex = 0; // loop
+        const pos = expanded[pathIndex];
+        const next = expanded[(pathIndex + 1) % expanded.length];
+
+        const dist = distanceMeters(pos, next);
+        const speed = (dist / (intervalMs / 1000)) * 3.6; // km/h
+        const head = bearing(pos, next);
+
+        socket.emit("driver:location", {
+          lat: pos[0],
+          lng: pos[1],
+          speed: Math.min(speed, 60),
+          heading: head,
+        });
+
+        $pos.textContent = `${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}`;
+        $speed.textContent = Math.round(Math.min(speed, 60));
+        pathIndex++;
+      }, intervalMs);
+    });
+
+    $stop.addEventListener("click", () => {
+      if (interval) clearInterval(interval);
+      $start.disabled = false;
+      $stop.disabled = true;
+      log("Percurso interrompido");
+    });
+  </script>
+</body>
+</html>
