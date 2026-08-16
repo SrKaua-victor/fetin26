@@ -1,0 +1,15 @@
+# Banco SQLite — contém hashes de senha e o segredo usado para assinar os tokens.
+# É recriado sozinho na primeira execução do backend.
+backend/data/
+
+# Saídas de build do Android (centenas de MB, tudo gerado por `npm run build:apk`)
+frontend-driver/android/build/
+frontend-driver/android/app/build/
+frontend-driver/android/capacitor-cordova-android-plugins/build/
+frontend-driver/android/.gradle/
+
+# Caminho do SDK, específico de cada máquina
+frontend-driver/android/local.properties
+
+# Dependências do app do motorista (reinstaláveis com `npm install`)
+frontend-driver/node_modules/

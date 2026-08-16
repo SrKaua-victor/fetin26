@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.bustrack.motorista",
+  "appName": "BusTrack Motorista",
+  "webDir": "dist",
+  "android": {
+    "useLegacyBridge": true,
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

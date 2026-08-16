@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Frente do ícone adaptativo (108x108, área segura no centro 72x72).
+  Vetor em vez de PNG: não depende de ferramenta de imagem e fica nítido em qualquer tela.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Carroceria e janelas -->
+    <path
+        android:pathData="M41,28 H67 A9,9 0 0 1 76,37 V65 A9,9 0 0 1 67,74 H41 A9,9 0 0 1 32,65 V37 A9,9 0 0 1 41,28 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M32,47 H76"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+
+    <!-- Pés -->
+    <path
+        android:pathData="M42,74 V82"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M66,74 V82"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+
+    <!-- Faróis -->
+    <path
+        android:pathData="M38.6,62 a3.4,3.4 0 1 0 6.8,0 a3.4,3.4 0 1 0 -6.8,0 Z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M62.6,62 a3.4,3.4 0 1 0 6.8,0 a3.4,3.4 0 1 0 -6.8,0 Z"
+        android:fillColor="#FFFFFF" />
+</vector>

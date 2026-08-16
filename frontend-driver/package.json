@@ -1,0 +1,28 @@
+{
+  "name": "bustrack-driver",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5175 --host",
+    "dev:https": "vite --mode https --port 5175 --host",
+    "build": "vite build",
+    "preview": "vite preview --port 5175 --host",
+    "preview:https": "vite preview --mode https --port 5175 --host",
+    "build:apk": "vite build && cap sync android && cd android && gradlew assembleDebug",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.26",
+    "@capacitor/android": "^7.6.8",
+    "@capacitor/cli": "^7.6.8",
+    "@capacitor/core": "^7.6.8",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "socket.io-client": "^4.7.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8"
+  }
+}

@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BusTrack Motorista</string>
+    <string name="title_activity_main">BusTrack Motorista</string>
+    <string name="package_name">br.com.bustrack.motorista</string>
+    <string name="custom_url_scheme">br.com.bustrack.motorista</string>
+
+    <!-- Nome do canal da notificação fixa que aparece durante a viagem.
+         O Android exige essa notificação para manter o GPS rodando em segundo plano. -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Viagem em andamento</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_bus</string>
+    <string name="capacitor_background_geolocation_notification_color">#2563EB</string>
+</resources>

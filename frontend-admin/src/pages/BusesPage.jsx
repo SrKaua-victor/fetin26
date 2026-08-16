@@ -11,9 +11,14 @@ export default function BusesPage({ buses, routes }) {
     return routes.find((r) => r.id === id)?.color || "#94a3b8";
   }
 
-  const filtered = buses.filter((b) =>
-    (b.driverName || "").toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = buses.filter((b) => {
+    const term = query.toLowerCase();
+    return (
+      (b.driverName || "").toLowerCase().includes(term) ||
+      (b.plate || "").toLowerCase().includes(term) ||
+      routeName(b.routeId).toLowerCase().includes(term)
+    );
+  });
   const onlineCount = buses.filter((b) => b.online).length;
 
   return (
@@ -92,7 +97,10 @@ export default function BusesPage({ buses, routes }) {
                   </span>
                 </div>
 
-                <div style={S.name}>{b.driverName}</div>
+                <div style={S.nameRow}>
+                  <span style={S.name}>{b.driverName}</span>
+                  {b.plate && <span style={S.plate}>{b.plate}</span>}
+                </div>
                 <div style={S.routeLine}>
                   <span style={S.routeColorDot(color)} />
                   {routeName(b.routeId)}
@@ -196,12 +204,30 @@ const S = {
     color: "white",
     boxShadow: `0 8px 18px -4px ${color}55`,
   }),
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   name: {
     fontFamily: "var(--font-display)",
     fontSize: 16,
     fontWeight: 700,
     color: "var(--text)",
     letterSpacing: "-0.01em",
+  },
+  plate: {
+    fontFamily: "var(--font-display)",
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: "0.06em",
+    color: "var(--text-soft)",
+    background: "var(--hover)",
+    border: "1px solid var(--border)",
+    borderRadius: 7,
+    padding: "3px 8px",
+    whiteSpace: "nowrap",
   },
   routeLine: {
     marginTop: 4,

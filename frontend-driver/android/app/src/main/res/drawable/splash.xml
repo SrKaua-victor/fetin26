@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tela de abertura: fundo azul da marca com o ônibus no centro.
+  Substitui o splash branco padrão do Capacitor, para o app abrir já com a identidade
+  do BusTrack e emendar sem piscar na tela de carregamento em React.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item
+        android:drawable="@drawable/ic_bus_foreground"
+        android:gravity="center"
+        android:width="180dp"
+        android:height="180dp" />
+</layer-list>

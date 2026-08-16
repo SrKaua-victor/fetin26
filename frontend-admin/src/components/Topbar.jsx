@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, Bus, ChevronDown, Map, Moon, Route, Sun, MapPin, ChartBar } from "./Icons";
+import { Bell, Bus, ChevronDown, Map, Moon, Route, Sun, MapPin, ChartBar, Users } from "./Icons";
 
 const styles = {
   bar: {
@@ -177,6 +177,7 @@ const styles = {
 const NAV_ITEMS = [
   { id: "routes",   label: "Rotas",        Icon: Route },
   { id: "buses",    label: "Ônibus",       Icon: Bus },
+  { id: "fleet",    label: "Frota",        Icon: Users },
   { id: "stops",    label: "Paradas",      Icon: MapPin },
   { id: "map",      label: "Mapa ao vivo", Icon: Map },
   { id: "reports",  label: "Relatórios",   Icon: ChartBar },
