@@ -58,10 +58,17 @@ function sign(payloadB64) {
 export function signToken({ driverId, name, registration }) {
   const payload = {
     sub: driverId,
+    role: "driver",
     name,
     registration,
     exp: Date.now() + TOKEN_TTL_MS,
   };
+  const payloadB64 = b64url(JSON.stringify(payload));
+  return `${payloadB64}.${sign(payloadB64)}`;
+}
+
+export function signAdminToken(username) {
+  const payload = { sub: username, role: "admin", exp: Date.now() + TOKEN_TTL_MS };
   const payloadB64 = b64url(JSON.stringify(payload));
   return `${payloadB64}.${sign(payloadB64)}`;
 }
@@ -91,9 +98,19 @@ export function requireDriver(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   const payload = verifyToken(token);
-  if (!payload) {
+  if (!payload || payload.role !== "driver") {
     return res.status(401).json({ error: "Sessão expirada. Faça login novamente." });
   }
   req.driver = payload;
+  next();
+}
+
+export function requireAdmin(req, res, next) {
+  const header = req.headers.authorization || "";
+  const payload = verifyToken(header.startsWith("Bearer ") ? header.slice(7) : null);
+  if (!payload || payload.role !== "admin") {
+    return res.status(401).json({ error: "Acesso administrativo não autorizado" });
+  }
+  req.admin = payload;
   next();
 }

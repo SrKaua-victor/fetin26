@@ -44,6 +44,16 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS routes (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL,
+    stops_json TEXT NOT NULL DEFAULT '[]',
+    path_json  TEXT NOT NULL DEFAULT '[]',
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS trips (
     id          TEXT PRIMARY KEY,
     driver_id   TEXT,
@@ -74,6 +84,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_trips_started     ON trips(started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_trips_open        ON trips(ended_at);
 `);
+
+function mapRoute(row) {
+  if (!row) return null;
+  return { id: row.id, name: row.name, color: row.color,
+    stops: JSON.parse(row.stops_json), path: JSON.parse(row.path_json),
+    active: !!row.active, createdAt: row.created_at };
+}
+
+export function listRoutes() {
+  return db.prepare("SELECT * FROM routes ORDER BY name").all().map(mapRoute);
+}
+export function getRoute(id) {
+  return mapRoute(db.prepare("SELECT * FROM routes WHERE id = ?").get(id));
+}
+export function saveRoute(route) {
+  db.prepare(`INSERT INTO routes (id,name,color,stops_json,path_json,active,created_at)
+    VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,color=excluded.color,
+    stops_json=excluded.stops_json,path_json=excluded.path_json,active=excluded.active`).run(
+      route.id, route.name, route.color, JSON.stringify(route.stops), JSON.stringify(route.path),
+      route.active ? 1 : 0, route.createdAt);
+  return getRoute(route.id);
+}
+export function removeRoute(id) {
+  return db.prepare("DELETE FROM routes WHERE id = ?").run(id).changes > 0;
+}
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export function getSetting(key) {
@@ -303,7 +338,8 @@ export function listTrips({ limit = 50, driverId, vehicleId, routeId } = {}) {
                ${where.length ? "WHERE " + where.join(" AND ") : ""}
                ORDER BY started_at DESC
                LIMIT ?`;
-  return db.prepare(sql).all(...params, Number(limit) || 50).map(mapTrip);
+  const safeLimit = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 50));
+  return db.prepare(sql).all(...params, safeLimit).map(mapTrip);
 }
 
 // ─── Posições ─────────────────────────────────────────────────────────────────
@@ -345,11 +381,12 @@ export function bumpTripCounters(tripId, { points = 0, distanceM = 0 }) {
 }
 
 export function getTripLocations(tripId, { limit = 5000 } = {}) {
+  const safeLimit = Math.min(10000, Math.max(1, Number.parseInt(limit, 10) || 5000));
   return db
     .prepare(
       "SELECT lat, lng, speed, heading, accuracy, recorded_at FROM locations WHERE trip_id = ? ORDER BY id LIMIT ?"
     )
-    .all(tripId, Number(limit) || 5000)
+    .all(tripId, safeLimit)
     .map((r) => ({
       lat: r.lat,
       lng: r.lng,

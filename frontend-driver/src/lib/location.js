@@ -103,7 +103,31 @@ export async function startTracking({ onPosition, onError, plate }) {
  * No app nativo quem pede a permissão é o próprio watcher, então não há o que checar aqui.
  */
 export function requestPermission() {
-  if (isNative) return Promise.resolve(true);
+  if (isNative) {
+    return new Promise(async (resolve, reject) => {
+      let watcherId;
+      let settled = false;
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId }).catch(() => {});
+        if (error) reject(error); else resolve(true);
+      };
+      const timer = setTimeout(() => finish(new Error("O GPS demorou demais para responder.")), 20000);
+      try {
+        watcherId = await BackgroundGeolocation.addWatcher(
+          { requestPermissions: true, stale: false, distanceFilter: 0 },
+          (_location, error) => {
+            finish(error ? new Error(describeNativeError(error)) : null);
+          }
+        );
+        if (settled) BackgroundGeolocation.removeWatcher({ id: watcherId }).catch(() => {});
+      } catch (error) {
+        finish(new Error(describeNativeError(error)));
+      }
+    });
+  }
   if (!("geolocation" in navigator)) {
     return Promise.reject(new Error("Este aparelho não tem GPS disponível."));
   }

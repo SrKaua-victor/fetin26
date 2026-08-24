@@ -172,6 +172,13 @@ const styles = {
     color: "var(--text-muted)",
     fontWeight: 500,
   },
+  menu: {
+    position: "absolute", top: 48, right: 0, width: 280, padding: 10,
+    borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)",
+    boxShadow: "var(--shadow-lg)", color: "var(--text)", zIndex: 2100,
+  },
+  menuTitle: { fontWeight: 800, fontSize: 13, padding: "6px 8px 10px" },
+  menuItem: { width: "100%", padding: "10px", borderRadius: 9, textAlign: "left", color: "var(--text)", background: "var(--surface-soft)", fontSize: 12.5 },
 };
 
 const NAV_ITEMS = [
@@ -183,8 +190,9 @@ const NAV_ITEMS = [
   { id: "reports",  label: "Relatórios",   Icon: ChartBar },
 ];
 
-export default function Topbar({ connected, activePage, onNavigate, theme, onToggleTheme }) {
+export default function Topbar({ connected, activePage, onNavigate, theme, onToggleTheme, onLogout }) {
   const [hovered, setHovered] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null);
   return (
     <header style={styles.bar}>
       <div style={styles.brand}>
@@ -230,8 +238,10 @@ export default function Topbar({ connected, activePage, onNavigate, theme, onTog
           {connected ? "Online" : "Offline"}
         </div>
 
+        <div style={{ position: "relative" }}>
         <button
           style={styles.iconBtn}
+          onClick={() => setOpenMenu((value) => value === "notifications" ? null : "notifications")}
           onClick={onToggleTheme}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -249,15 +259,24 @@ export default function Topbar({ connected, activePage, onNavigate, theme, onTog
           title="Notificações"
         >
           <Bell size={18} />
-          <span style={styles.badge}>3</span>
+          {!connected && <span style={styles.badge}>1</span>}
         </button>
+        {openMenu === "notifications" && <div style={styles.menu} role="dialog" aria-label="Notificações">
+          <div style={styles.menuTitle}>Notificações</div>
+          <div style={styles.menuItem}>{connected ? "Sistema conectado e operando normalmente." : "Servidor desconectado. Verifique o backend."}</div>
+        </div>}
+        </div>
 
         <div style={styles.divider} />
 
-        <div
+        <div style={{ position: "relative" }}>
+        <button
           style={styles.avatarWrap}
+          onClick={() => setOpenMenu((value) => value === "profile" ? null : "profile")}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-soft)")}
+          aria-expanded={openMenu === "profile"}
+          aria-label="Abrir menu do administrador"
         >
           <div style={styles.avatar}>A</div>
           <div style={styles.avatarInfo}>
@@ -265,6 +284,11 @@ export default function Topbar({ connected, activePage, onNavigate, theme, onTog
             <span style={styles.avatarRole}>Administrador</span>
           </div>
           <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
+        </button>
+        {openMenu === "profile" && <div style={{ ...styles.menu, width: 210 }}>
+          <div style={styles.menuTitle}>Administração</div>
+          <button style={{ ...styles.menuItem, color: "var(--danger)" }} onClick={onLogout}>Sair da conta</button>
+        </div>}
         </div>
       </div>
     </header>

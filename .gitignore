@@ -13,3 +13,11 @@ frontend-driver/android/local.properties
 
 # Dependências do app do motorista (reinstaláveis com `npm install`)
 frontend-driver/node_modules/
+# Dependências e saídas geradas
+node_modules/
+**/node_modules/
+**/dist/
+.env
+.env.*
+!.env.example
+node_modules

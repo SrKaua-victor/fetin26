@@ -1,0 +1,23 @@
+{
+  "name": "bustrack-monorepo",
+  "version": "1.0.0",
+  "description": "Sistema completo de rastreio de ônibus em tempo real",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend-user && npm install && cd ../frontend-admin && npm install && cd ../frontend-driver && npm install && cd ..",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:user\" \"npm run dev:admin\" \"npm run dev:driver\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:user": "cd frontend-user && npm run dev",
+    "dev:admin": "cd frontend-admin && npm run dev",
+    "dev:driver": "cd frontend-driver && npm run dev",
+    "build:all": "npm run build:backend && npm run build:user && npm run build:admin && npm run build:driver",
+    "build:backend": "cd backend && npm run check",
+    "build:user": "cd frontend-user && npm run build",
+    "build:admin": "cd frontend-admin && npm run build",
+    "build:driver": "cd frontend-driver && npm run build",
+    "build:apk": "cd frontend-driver && npm run build:apk"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

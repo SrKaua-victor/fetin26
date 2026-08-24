@@ -7,7 +7,7 @@ export function useAdminSocket() {
   const [buses, setBuses] = useState([]);
 
   useEffect(() => {
-    const socket = io("http://localhost:3001", { transports: ["websocket"] });
+    const socket = io(import.meta.env.VITE_SERVER_URL || undefined, { transports: ["websocket"] });
     socketRef.current = socket;
 
     socket.on("connect", () => setConnected(true));

@@ -5,6 +5,7 @@ import { postLocations } from "../lib/nativeHttp";
 import { distanceMeters } from "../lib/geo";
 
 const ACTIVE_TRIP_KEY = "bustrack.driver.trip";
+const BUFFER_KEY = "bustrack.driver.locationBuffer";
 const MAX_BUFFER = 2000; // ~1h de pontos guardados enquanto estiver sem sinal
 const ACK_TIMEOUT = 10000;
 // Com o app em segundo plano as posições sobem em lote por HTTP nativo a cada 10s
@@ -21,6 +22,14 @@ function readActiveTrip() {
     return null;
   }
 }
+function readBuffer() {
+  try { const value = JSON.parse(localStorage.getItem(BUFFER_KEY) || "[]"); return Array.isArray(value) ? value : []; }
+  catch { return []; }
+}
+function storeBuffer(points) {
+  if (points.length) localStorage.setItem(BUFFER_KEY, JSON.stringify(points));
+  else localStorage.removeItem(BUFFER_KEY);
+}
 
 /**
  * Conexão do motorista com a central.
@@ -30,7 +39,7 @@ function readActiveTrip() {
 export function useDriverSocket({ token, serverUrl }) {
   const socketRef = useRef(null);
   const tripRef = useRef(readActiveTrip());
-  const bufferRef = useRef([]);
+  const bufferRef = useRef(readBuffer());
   const tokenRef = useRef(token);
   const registeredRef = useRef(false);
   const lastHttpFlushRef = useRef(0);
@@ -66,6 +75,7 @@ export function useDriverSocket({ token, serverUrl }) {
       const res = await socket.timeout(ACK_TIMEOUT).emitWithAck("driver:location:batch", batch);
       if (res?.ok) {
         bufferRef.current = bufferRef.current.slice(batch.length);
+        storeBuffer(bufferRef.current);
         setPending(bufferRef.current.length);
         setSent((n) => n + res.saved);
         setLastSentAt(new Date().toISOString());
@@ -88,6 +98,7 @@ export function useDriverSocket({ token, serverUrl }) {
     try {
       await postLocations(active.tripId, batch);
       bufferRef.current = bufferRef.current.slice(batch.length);
+      storeBuffer(bufferRef.current);
       setPending(bufferRef.current.length);
       setSent((n) => n + batch.length);
       setLastSentAt(new Date().toISOString());
@@ -135,11 +146,14 @@ export function useDriverSocket({ token, serverUrl }) {
       const active = tripRef.current;
       if (active?.tripId) {
         try {
-          await register({
+          const resumed = await register({
             vehicleId: active.vehicleId,
             routeId: active.routeId,
             tripId: active.tripId,
           });
+          if (resumed.tripId !== active.tripId) {
+            persistTrip({ ...active, tripId: resumed.tripId, startedAt: resumed.bus?.startedAt || active.startedAt });
+          }
           await flushBuffer();
         } catch (err) {
           // A viagem não voltou (token expirado, veículo tomado por outro motorista…).
@@ -173,7 +187,7 @@ export function useDriverSocket({ token, serverUrl }) {
       document.removeEventListener("visibilitychange", onVisibility);
       socket.disconnect();
     };
-  }, [register, flushBuffer, serverUrl]);
+  }, [register, flushBuffer, serverUrl, persistTrip]);
 
   const startTrip = useCallback(
     async ({ vehicleId, routeId, plate, routeName }) => {
@@ -187,6 +201,7 @@ export function useDriverSocket({ token, serverUrl }) {
         startedAt: res.bus?.startedAt || new Date().toISOString(),
       };
       bufferRef.current = [];
+      storeBuffer([]);
       lastPointRef.current = null;
       setPending(0);
       setSent(0);
@@ -216,6 +231,7 @@ export function useDriverSocket({ token, serverUrl }) {
       if (isNative && isBackground()) {
         bufferRef.current.push(point);
         if (bufferRef.current.length > MAX_BUFFER) bufferRef.current.shift();
+        storeBuffer(bufferRef.current);
         setPending(bufferRef.current.length);
 
         if (Date.now() - lastHttpFlushRef.current >= BACKGROUND_FLUSH_MS) {
@@ -236,6 +252,7 @@ export function useDriverSocket({ token, serverUrl }) {
       // Offline: guarda para enviar quando a conexão voltar
       bufferRef.current.push(point);
       if (bufferRef.current.length > MAX_BUFFER) bufferRef.current.shift();
+      storeBuffer(bufferRef.current);
       setPending(bufferRef.current.length);
 
       // No app nativo dá para tentar o HTTP mesmo em primeiro plano:
@@ -252,6 +269,7 @@ export function useDriverSocket({ token, serverUrl }) {
     const socket = socketRef.current;
     // Não perde o que ficou no buffer ao encerrar
     if (bufferRef.current.length && isNative) await flushOverHttp();
+    if (bufferRef.current.length) throw new Error("Ainda há posições pendentes. Conecte-se à internet antes de encerrar.");
     if (socket?.connected) {
       await flushBuffer();
       try {
@@ -261,6 +279,7 @@ export function useDriverSocket({ token, serverUrl }) {
       }
     }
     bufferRef.current = [];
+    storeBuffer([]);
     setPending(0);
     registeredRef.current = false;
     setRegistered(false);

@@ -2,7 +2,7 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,10 @@ import {
   getSetting,
   setSetting,
   seed,
-  closeOrphanTrips,
+  listRoutes,
+  getRoute,
+  saveRoute,
+  removeRoute,
   listDrivers,
   getDriver,
   findDriverByRegistration,
@@ -34,9 +37,12 @@ import {
 } from "./db.js";
 import {
   verifyPassword,
+  hashPassword,
   signToken,
+  signAdminToken,
   verifyToken,
   requireDriver,
+  requireAdmin,
   initTokenSecret,
 } from "./auth.js";
 
@@ -45,8 +51,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ─── Banco ────────────────────────────────────────────────────────────────────
 initTokenSecret({ getSetting, setSetting });
 seed();
-const orphans = closeOrphanTrips();
-if (orphans > 0) console.log(`[db] ${orphans} viagem(ns) aberta(s) foram encerradas na inicialização`);
+if (process.env.ADMIN_PASSWORD || !getSetting("admin_password_hash")) {
+  setSetting("admin_password_hash", hashPassword(process.env.ADMIN_PASSWORD || "admin123"));
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -111,7 +118,8 @@ const exampleRoute = {
   active: true,
   createdAt: new Date().toISOString(),
 };
-state.routes.set(exampleRoute.id, exampleRoute);
+if (listRoutes().length === 0) saveRoute(exampleRoute);
+for (const route of listRoutes()) state.routes.set(route.id, route);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function distanceMeters(a, b) {
@@ -131,6 +139,36 @@ function isValidCoord(lat, lng) {
     Math.abs(lat) <= 90 && Math.abs(lng) <= 180
   );
 }
+
+function validRouteBody(body = {}) {
+  if (typeof body.name !== "string" || !body.name.trim() || body.name.length > 120) return false;
+  if (body.stops !== undefined && !Array.isArray(body.stops)) return false;
+  if (body.path !== undefined && !Array.isArray(body.path)) return false;
+  if ((body.stops || []).some((s) => !s || typeof s.name !== "string" || !isValidCoord(Number(s.lat), Number(s.lng)))) return false;
+  if ((body.path || []).some((p) => !Array.isArray(p) || !isValidCoord(Number(p[0]), Number(p[1])))) return false;
+  return true;
+}
+
+const loginAttempts = new Map();
+function loginLimited(req, res, next) {
+  const key = req.ip;
+  const now = Date.now();
+  const recent = (loginAttempts.get(key) || []).filter((t) => now - t < 60_000);
+  if (recent.length >= 10) return res.status(429).json({ error: "Muitas tentativas. Aguarde um minuto." });
+  recent.push(now); loginAttempts.set(key, recent); next();
+}
+
+app.get("/health", (_req, res) => res.json({ ok: true, service: "bustrack", time: new Date().toISOString() }));
+app.get("/", (_req, res) => res.redirect("/driver"));
+app.post("/api/admin/login", loginLimited, (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  const password = String(req.body?.password || "");
+  if (username !== (process.env.ADMIN_USERNAME || "admin") ||
+      !verifyPassword(password, getSetting("admin_password_hash"))) {
+    return res.status(401).json({ error: "Usuário ou senha incorretos" });
+  }
+  res.json({ token: signAdminToken(username), user: { username } });
+});
 
 function routeName(routeId) {
   return state.routes.get(routeId)?.name || null;
@@ -154,9 +192,10 @@ app.get("/api/routes/:id", (req, res) => {
   res.json(route);
 });
 
-app.post("/api/routes", (req, res) => {
+app.post("/api/routes", requireAdmin, (req, res) => {
+  if (!validRouteBody(req.body)) return res.status(400).json({ error: "Dados da rota inválidos" });
   const route = {
-    id: uuidv4(),
+    id: randomUUID(),
     name: req.body.name || "Nova Rota",
     color: req.body.color || "#3B82F6",
     stops: req.body.stops || [],
@@ -164,24 +203,26 @@ app.post("/api/routes", (req, res) => {
     active: req.body.active ?? true,
     createdAt: new Date().toISOString(),
   };
-  state.routes.set(route.id, route);
+  state.routes.set(route.id, saveRoute(route));
   io.emit("routes:updated", [...state.routes.values()]);
   res.status(201).json(route);
 });
 
-app.put("/api/routes/:id", (req, res) => {
+app.put("/api/routes/:id", requireAdmin, (req, res) => {
   const route = state.routes.get(req.params.id);
   if (!route) return res.status(404).json({ error: "Rota não encontrada" });
   const updated = { ...route, ...req.body, id: route.id };
-  state.routes.set(route.id, updated);
+  if (!validRouteBody(updated)) return res.status(400).json({ error: "Dados da rota inválidos" });
+  state.routes.set(route.id, saveRoute(updated));
   io.emit("routes:updated", [...state.routes.values()]);
   res.json(updated);
 });
 
-app.delete("/api/routes/:id", (req, res) => {
+app.delete("/api/routes/:id", requireAdmin, (req, res) => {
   if (!state.routes.has(req.params.id))
     return res.status(404).json({ error: "Rota não encontrada" });
   state.routes.delete(req.params.id);
+  removeRoute(req.params.id);
   io.emit("routes:updated", [...state.routes.values()]);
   res.json({ success: true });
 });
@@ -192,7 +233,7 @@ app.get("/api/buses", (req, res) => {
 });
 
 // ─── REST: Login do motorista ─────────────────────────────────────────────────
-app.post("/api/driver/login", (req, res) => {
+app.post("/api/driver/login", loginLimited, (req, res) => {
   const { registration, password } = req.body || {};
   if (!registration || !password) {
     return res.status(400).json({ error: "Informe matrícula e senha" });
@@ -283,8 +324,10 @@ app.get("/api/vehicles", (req, res) => {
   res.json(listVehicles({ activeOnly: req.query.active === "1" }));
 });
 
-app.post("/api/vehicles", (req, res) => {
+app.post("/api/vehicles", requireAdmin, (req, res) => {
   if (!req.body?.plate) return res.status(400).json({ error: "Placa é obrigatória" });
+  if (!Number.isInteger(Number(req.body.capacity ?? 40)) || Number(req.body.capacity ?? 40) < 1 || Number(req.body.capacity ?? 40) > 200)
+    return res.status(400).json({ error: "Capacidade deve estar entre 1 e 200" });
   try {
     res.status(201).json(createVehicle(req.body));
   } catch (err) {
@@ -295,7 +338,7 @@ app.post("/api/vehicles", (req, res) => {
   }
 });
 
-app.put("/api/vehicles/:id", (req, res) => {
+app.put("/api/vehicles/:id", requireAdmin, (req, res) => {
   try {
     const vehicle = updateVehicle(req.params.id, req.body || {});
     if (!vehicle) return res.status(404).json({ error: "Veículo não encontrado" });
@@ -308,22 +351,23 @@ app.put("/api/vehicles/:id", (req, res) => {
   }
 });
 
-app.delete("/api/vehicles/:id", (req, res) => {
+app.delete("/api/vehicles/:id", requireAdmin, (req, res) => {
   if (!deleteVehicle(req.params.id))
     return res.status(404).json({ error: "Veículo não encontrado" });
   res.json({ success: true });
 });
 
 // ─── REST: Motoristas (cadastro pelo admin) ───────────────────────────────────
-app.get("/api/drivers", (req, res) => {
+app.get("/api/drivers", requireAdmin, (req, res) => {
   res.json(listDrivers());
 });
 
-app.post("/api/drivers", (req, res) => {
+app.post("/api/drivers", requireAdmin, (req, res) => {
   const { name, registration, password } = req.body || {};
   if (!name || !registration || !password) {
     return res.status(400).json({ error: "Informe nome, matrícula e senha" });
   }
+  if (String(password).length < 6) return res.status(400).json({ error: "Senha deve ter ao menos 6 caracteres" });
   try {
     res.status(201).json(createDriver(req.body));
   } catch (err) {
@@ -334,7 +378,7 @@ app.post("/api/drivers", (req, res) => {
   }
 });
 
-app.put("/api/drivers/:id", (req, res) => {
+app.put("/api/drivers/:id", requireAdmin, (req, res) => {
   try {
     const driver = updateDriver(req.params.id, req.body || {});
     if (!driver) return res.status(404).json({ error: "Motorista não encontrado" });
@@ -347,14 +391,14 @@ app.put("/api/drivers/:id", (req, res) => {
   }
 });
 
-app.delete("/api/drivers/:id", (req, res) => {
+app.delete("/api/drivers/:id", requireAdmin, (req, res) => {
   if (!deleteDriver(req.params.id))
     return res.status(404).json({ error: "Motorista não encontrado" });
   res.json({ success: true });
 });
 
 // ─── REST: Histórico de viagens ───────────────────────────────────────────────
-app.get("/api/trips", (req, res) => {
+app.get("/api/trips", requireAdmin, (req, res) => {
   res.json(
     listTrips({
       limit: req.query.limit,
@@ -365,13 +409,13 @@ app.get("/api/trips", (req, res) => {
   );
 });
 
-app.get("/api/trips/:id", (req, res) => {
+app.get("/api/trips/:id", requireAdmin, (req, res) => {
   const trip = getTrip(req.params.id);
   if (!trip) return res.status(404).json({ error: "Viagem não encontrada" });
   res.json(trip);
 });
 
-app.get("/api/trips/:id/locations", (req, res) => {
+app.get("/api/trips/:id/locations", requireAdmin, (req, res) => {
   if (!getTrip(req.params.id)) return res.status(404).json({ error: "Viagem não encontrada" });
   res.json(getTripLocations(req.params.id, { limit: req.query.limit }));
 });
@@ -417,6 +461,11 @@ io.on("connection", (socket) => {
       }
       driverId = driver.id;
       driverName = driver.name;
+    } else if (process.env.ALLOW_LEGACY_SIMULATOR === "1") {
+      driverName = payload.driverName || "Simulador";
+    } else {
+      reply({ ok: false, error: "Autenticação obrigatória" });
+      return;
     }
 
     let vehicle = null;
@@ -445,6 +494,10 @@ io.on("connection", (socket) => {
 
     // Retoma a viagem quando o app reconecta; senão abre uma nova no banco
     let trip = resumeTripId ? getTrip(resumeTripId) : null;
+    if (trip && trip.driverId !== driverId) {
+      reply({ ok: false, error: "Esta viagem pertence a outro motorista" });
+      return;
+    }
     if (trip && trip.endedAt) trip = null;
     if (trip) {
       const pending = pendingTripCloses.get(trip.id);
@@ -466,7 +519,7 @@ io.on("connection", (socket) => {
     }
 
     const bus = {
-      id: busId || vehicle?.id || uuidv4(),
+      id: busId || vehicle?.id || randomUUID(),
       driverId,
       driverName,
       vehicleId: vehicle?.id ?? null,
@@ -590,8 +643,10 @@ function persistPoints(tripId, points) {
   let distance = 0;
 
   for (const point of points) {
-    const recordedAt = point.recordedAt || new Date().toISOString();
-    const stamp = new Date(recordedAt).getTime() || Date.now();
+    const requestedStamp = new Date(point.recordedAt || 0).getTime();
+    const now = Date.now();
+    const stamp = Number.isFinite(requestedStamp) && Math.abs(requestedStamp - now) < 300_000 ? requestedStamp : now;
+    const recordedAt = new Date(stamp).toISOString();
     const elapsed = stamp - writer.lastRecordedAt;
     const moved = writer.lastPoint ? distanceMeters(writer.lastPoint, point) : Infinity;
 
@@ -603,7 +658,7 @@ function persistPoints(tripId, points) {
     if (!shouldSave) continue;
 
     keep.push({ ...point, recordedAt });
-    if (Number.isFinite(moved)) distance += moved;
+    if (Number.isFinite(moved) && moved < 2000) distance += moved;
     writer.lastRecordedAt = stamp;
     writer.lastPoint = { lat: point.lat, lng: point.lng };
   }

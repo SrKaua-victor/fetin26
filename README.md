@@ -61,6 +61,10 @@ npm install
 npm run dev
 ```
 
+Entre com `admin` / `admin123` no primeiro uso. Antes de colocar o sistema em uma
+rede pública, copie `.env.example` para `.env` e defina `ADMIN_PASSWORD` e
+`AUTH_SECRET` com valores fortes. A API pode ser verificada em `http://localhost:3001/health`.
+
 Abra `http://localhost:5174`.
 
 ### 4. App do Motorista
@@ -149,7 +153,7 @@ endereço de servidor como padrão:
 VITE_SERVER_URL=http://192.168.0.10:3001 npm run build:apk
 ```
 
-Requisitos para compilar: **Java 17+** e o **Android SDK**. O caminho do SDK fica em
+Requisitos para compilar: **Java 21+** e o **Android SDK**. O caminho do SDK fica em
 `frontend-driver/android/local.properties`, que não vai para o Git por ser específico de cada
 máquina. Se o arquivo não existir, crie com uma linha (barras normais, não invertidas):
 
