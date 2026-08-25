@@ -10,6 +10,9 @@ const MAX_BUFFER = 2000; // ~1h de pontos guardados enquanto estiver sem sinal
 const ACK_TIMEOUT = 10000;
 // Com o app em segundo plano as posições sobem em lote por HTTP nativo a cada 10s
 const BACKGROUND_FLUSH_MS = 10000;
+// Cadência da cópia do buffer no localStorage. Ver `persistBuffer`.
+const PERSIST_MIN_INTERVAL_MS = 5000;
+const PERSIST_EVERY_POINTS = 25;
 
 function isBackground() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
@@ -43,8 +46,12 @@ export function useDriverSocket({ token, serverUrl }) {
   const tokenRef = useRef(token);
   const registeredRef = useRef(false);
   const lastHttpFlushRef = useRef(0);
-  const httpBusyRef = useRef(false);
+  // Guarda o envio HTTP em andamento (não só um booleano) para quem chegar depois
+  // poder esperá-lo em vez de desistir.
+  const httpFlushRef = useRef(null);
   const lastPointRef = useRef(null);
+  const lastPersistRef = useRef(0);
+  const sincePersistRef = useRef(0);
 
   const [connected, setConnected] = useState(false);
   // `registered` = o servidor reconhece esta viagem. Só com ele as posições contam.
@@ -58,6 +65,30 @@ export function useDriverSocket({ token, serverUrl }) {
   const [distance, setDistance] = useState(0);
 
   tokenRef.current = token;
+
+  /**
+   * Copia o buffer para o localStorage sem fazer isso a cada leitura do GPS.
+   *
+   * `storeBuffer` serializa o array inteiro, que chega a MAX_BUFFER pontos. Como o
+   * watcher roda com distanceFilter 0, vinha uma posição por segundo — em segundo
+   * plano isso era um JSON.stringify de milhares de objetos por segundo durante toda
+   * a viagem, gastando CPU e bateria à toa. A cópia existe para o caso de o sistema
+   * matar o app, então basta estar razoavelmente em dia: grava a cada 25 pontos ou
+   * 5 segundos, o que vier primeiro. `force` grava na hora, nos momentos em que
+   * perder pontos importaria (app indo para segundo plano, fim de viagem).
+   */
+  const persistBuffer = useCallback((force = false) => {
+    sincePersistRef.current += 1;
+    const due =
+      force ||
+      sincePersistRef.current >= PERSIST_EVERY_POINTS ||
+      Date.now() - lastPersistRef.current >= PERSIST_MIN_INTERVAL_MS;
+    if (!due) return;
+
+    sincePersistRef.current = 0;
+    lastPersistRef.current = Date.now();
+    storeBuffer(bufferRef.current);
+  }, []);
 
   const persistTrip = useCallback((value) => {
     tripRef.current = value;
@@ -91,11 +122,18 @@ export function useDriverSocket({ token, serverUrl }) {
    */
   const flushOverHttp = useCallback(async () => {
     const active = tripRef.current;
-    if (!active?.tripId || httpBusyRef.current || bufferRef.current.length === 0) return;
+    if (!active?.tripId || bufferRef.current.length === 0) return;
 
-    httpBusyRef.current = true;
-    const batch = bufferRef.current.slice(0, 500);
-    try {
+    // Já existe um envio em andamento: espera esse terminar em vez de desistir.
+    // Desistir aqui fazia o encerramento da viagem falhar reclamando de posições
+    // pendentes que, na verdade, já estavam subindo naquele instante.
+    if (httpFlushRef.current) {
+      await httpFlushRef.current.catch(() => {});
+      return;
+    }
+
+    const run = (async () => {
+      const batch = bufferRef.current.slice(0, 500);
       await postLocations(active.tripId, batch);
       bufferRef.current = bufferRef.current.slice(batch.length);
       storeBuffer(bufferRef.current);
@@ -103,12 +141,34 @@ export function useDriverSocket({ token, serverUrl }) {
       setSent((n) => n + batch.length);
       setLastSentAt(new Date().toISOString());
       lastHttpFlushRef.current = Date.now();
+    })();
+
+    httpFlushRef.current = run;
+    try {
+      await run;
     } catch {
       // Sem rede ou servidor fora: o buffer continua guardado para a próxima tentativa
     } finally {
-      httpBusyRef.current = false;
+      httpFlushRef.current = null;
     }
   }, []);
+
+  /**
+   * Esvazia o buffer usando as duas vias disponíveis, em rodadas.
+   * Cada flush leva no máximo um lote (1000 pelo socket, 500 por HTTP), então um
+   * buffer cheio não cabe em uma chamada só. Para quando esvazia ou quando uma
+   * rodada inteira não consegue enviar nada. Devolve quantos pontos sobraram.
+   */
+  const drainBuffer = useCallback(async () => {
+    // Teto de rodadas: MAX_BUFFER dividido pelo menor lote, com folga
+    for (let round = 0; round < 8 && bufferRef.current.length; round++) {
+      const before = bufferRef.current.length;
+      if (socketRef.current?.connected) await flushBuffer();
+      if (bufferRef.current.length && isNative) await flushOverHttp();
+      if (bufferRef.current.length === before) break;
+    }
+    return bufferRef.current.length;
+  }, [flushBuffer, flushOverHttp]);
 
   /** Registra (ou retoma) a viagem no servidor. */
   const register = useCallback(
@@ -175,9 +235,14 @@ export function useDriverSocket({ token, serverUrl }) {
     socket.on("init", ({ routes: list }) => setRoutes(list || []));
     socket.on("routes:updated", (list) => setRoutes(list || []));
 
-    // Voltou para primeiro plano: manda pelo socket o que ficou acumulado
     function onVisibility() {
-      if (document.visibilityState !== "visible") return;
+      // Indo para segundo plano é justamente quando o sistema pode matar o app:
+      // garante que o buffer em memória chegou ao localStorage antes disso.
+      if (document.visibilityState !== "visible") {
+        persistBuffer(true);
+        return;
+      }
+      // Voltou para primeiro plano: manda pelo socket o que ficou acumulado
       if (!socket.connected) socket.connect();
       flushBuffer();
     }
@@ -187,7 +252,7 @@ export function useDriverSocket({ token, serverUrl }) {
       document.removeEventListener("visibilitychange", onVisibility);
       socket.disconnect();
     };
-  }, [register, flushBuffer, serverUrl, persistTrip]);
+  }, [register, flushBuffer, serverUrl, persistTrip, persistBuffer]);
 
   const startTrip = useCallback(
     async ({ vehicleId, routeId, plate, routeName }) => {
@@ -203,6 +268,8 @@ export function useDriverSocket({ token, serverUrl }) {
       bufferRef.current = [];
       storeBuffer([]);
       lastPointRef.current = null;
+      sincePersistRef.current = 0;
+      lastPersistRef.current = Date.now();
       setPending(0);
       setSent(0);
       setDistance(0);
@@ -231,7 +298,7 @@ export function useDriverSocket({ token, serverUrl }) {
       if (isNative && isBackground()) {
         bufferRef.current.push(point);
         if (bufferRef.current.length > MAX_BUFFER) bufferRef.current.shift();
-        storeBuffer(bufferRef.current);
+        persistBuffer();
         setPending(bufferRef.current.length);
 
         if (Date.now() - lastHttpFlushRef.current >= BACKGROUND_FLUSH_MS) {
@@ -252,7 +319,7 @@ export function useDriverSocket({ token, serverUrl }) {
       // Offline: guarda para enviar quando a conexão voltar
       bufferRef.current.push(point);
       if (bufferRef.current.length > MAX_BUFFER) bufferRef.current.shift();
-      storeBuffer(bufferRef.current);
+      persistBuffer();
       setPending(bufferRef.current.length);
 
       // No app nativo dá para tentar o HTTP mesmo em primeiro plano:
@@ -262,16 +329,24 @@ export function useDriverSocket({ token, serverUrl }) {
         flushOverHttp();
       }
     },
-    [flushBuffer, flushOverHttp]
+    [flushBuffer, flushOverHttp, persistBuffer]
   );
 
   const stopTrip = useCallback(async () => {
     const socket = socketRef.current;
-    // Não perde o que ficou no buffer ao encerrar
-    if (bufferRef.current.length && isNative) await flushOverHttp();
-    if (bufferRef.current.length) throw new Error("Ainda há posições pendentes. Conecte-se à internet antes de encerrar.");
+
+    // Não perde o que ficou no buffer ao encerrar. Vai em rodadas: antes isto era
+    // um único flush, então quem tivesse mais pontos que um lote ficava preso sem
+    // conseguir fechar a viagem, mesmo com a conexão perfeita.
+    const left = await drainBuffer();
+    if (left) {
+      throw new Error(
+        `Ainda ${left === 1 ? "há 1 posição pendente" : `há ${left} posições pendentes`}. ` +
+          "Conecte-se à internet antes de encerrar."
+      );
+    }
+
     if (socket?.connected) {
-      await flushBuffer();
       try {
         await socket.timeout(ACK_TIMEOUT).emitWithAck("driver:stop");
       } catch {
@@ -285,7 +360,7 @@ export function useDriverSocket({ token, serverUrl }) {
     setRegistered(false);
     setSessionError(null);
     persistTrip(null);
-  }, [flushBuffer, flushOverHttp, persistTrip]);
+  }, [drainBuffer, persistTrip]);
 
   return {
     connected,

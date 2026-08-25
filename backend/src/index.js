@@ -34,6 +34,7 @@ import {
   insertLocationBatch,
   bumpTripCounters,
   getTripLocations,
+  closeOrphanTrips,
 } from "./db.js";
 import {
   verifyPassword,
@@ -51,11 +52,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ─── Banco ────────────────────────────────────────────────────────────────────
 initTokenSecret({ getSetting, setSetting });
 seed();
+
+// Viagens que ficaram abertas de uma queda anterior. As paradas há pouco tempo
+// sobrevivem de propósito: o motorista pode estar rodando e reconectando agora.
+const orphanTrips = closeOrphanTrips();
 if (process.env.ADMIN_PASSWORD || !getSetting("admin_password_hash")) {
   setSetting("admin_password_hash", hashPassword(process.env.ADMIN_PASSWORD || "admin123"));
 }
 
 const app = express();
+
+// O servidor fica atrás de um túnel, que entrega tudo a partir de 127.0.0.1. Sem
+// isto o `req.ip` de todo mundo é o loopback, e o limite de tentativas de login
+// passa a ser somado entre todos os usuários — um motorista errando a senha
+// bloquearia os outros. Confiamos só no loopback: para forjar X-Forwarded-For
+// seria preciso já estar conectando da própria máquina.
+app.set("trust proxy", "loopback");
+
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
@@ -67,6 +80,23 @@ const io = new Server(httpServer, {
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+
+// Log das chamadas de API, desligado por padrão: em viagem sai uma linha por
+// posição de GPS. Ligue com LOG_API=1 no .env para descobrir se uma requisição que
+// "falhou" no app chegou a alcançar o servidor — sem isso, falha de rede e falha de
+// resposta ficam indistinguíveis de quem só vê a mensagem de erro no celular.
+if (process.env.LOG_API === "1") {
+  app.use("/api", (req, res, next) => {
+    const ua = String(req.headers["user-agent"] || "?").slice(0, 70);
+    res.on("finish", () => {
+      console.log(
+        `[api] ${res.statusCode} ${req.method} ${req.originalUrl} ip=${req.ip} xff=${req.headers["x-forwarded-for"] || "-"} origin=${req.headers.origin || "-"} ua="${ua}"`
+      );
+    });
+    next();
+  });
+  console.log("[api] log de requisições ligado (LOG_API=1)");
+}
 
 // ─── Estado em memória (ao vivo) ──────────────────────────────────────────────
 const state = {
@@ -82,6 +112,11 @@ const pendingTripCloses = new Map(); // tripId -> timeout (fechamento adiado)
 // Se o celular cai da rede, a viagem só é encerrada depois desse tempo —
 // assim uma reconexão rápida continua a mesma viagem em vez de abrir outra.
 const RECONNECT_GRACE_MS = 90000;
+
+// Ônibus remontado a partir de posição HTTP não tem socket para avisar quando o
+// motorista sai do ar, então precisa de uma varredura — senão ficaria parado no
+// mapa para sempre.
+const ORPHAN_BUS_TIMEOUT_MS = 3 * 60 * 1000;
 
 // Grava no banco no máximo a cada 2s, e só se o ônibus andou 15m —
 // mais um "heartbeat" a cada 30s para registrar ônibus parado.
@@ -155,11 +190,20 @@ function loginLimited(req, res, next) {
   const now = Date.now();
   const recent = (loginAttempts.get(key) || []).filter((t) => now - t < 60_000);
   if (recent.length >= 10) return res.status(429).json({ error: "Muitas tentativas. Aguarde um minuto." });
-  recent.push(now); loginAttempts.set(key, recent); next();
+  recent.push(now);
+  loginAttempts.set(key, recent);
+
+  // Sem esta limpeza o mapa guardaria uma entrada por IP que já tentou entrar,
+  // para sempre. É barato: só roda quando o mapa passa de mil chaves.
+  if (loginAttempts.size > 1000) {
+    for (const [ip, stamps] of loginAttempts) {
+      if (stamps.every((t) => now - t >= 60_000)) loginAttempts.delete(ip);
+    }
+  }
+  next();
 }
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "bustrack", time: new Date().toISOString() }));
-app.get("/", (_req, res) => res.redirect("/driver"));
 app.post("/api/admin/login", loginLimited, (req, res) => {
   const username = String(req.body?.username || "").trim();
   const password = String(req.body?.password || "");
@@ -285,29 +329,61 @@ app.post("/api/driver/locations", requireDriver, (req, res) => {
 
   // Mantém o ônibus se mexendo no mapa do passageiro e do admin
   const last = valid[valid.length - 1];
-  const bus = [...state.buses.values()].find((b) => b.tripId === tripId);
-  if (bus) {
-    const updated = {
-      ...bus,
-      lat: last.lat,
-      lng: last.lng,
-      speed: last.speed || 0,
-      heading: last.heading || 0,
+  let bus = [...state.buses.values()].find((b) => b.tripId === tripId);
+
+  // Em segundo plano o app manda posição por HTTP, sem passar pelo socket. Se o
+  // backend reiniciou no meio do percurso, o ônibus sumiu do estado em memória —
+  // e sem remontá-lo aqui as posições seguiriam sendo gravadas no banco enquanto o
+  // ônibus ficaria invisível no mapa, com o motorista rodando normalmente, até o
+  // app reconectar o socket.
+  if (!bus) {
+    const vehicle = trip.vehicleId ? getVehicle(trip.vehicleId) : null;
+    bus = {
+      id: trip.vehicleId || tripId,
+      driverId: trip.driverId ?? null,
+      driverName: trip.driverName || "Motorista",
+      vehicleId: trip.vehicleId ?? null,
+      plate: trip.plate ?? null,
+      model: vehicle?.model ?? null,
+      capacity: vehicle?.capacity ?? null,
+      tripId,
+      routeId: trip.routeId ?? null,
+      socketId: null,
+      lat: null,
+      lng: null,
+      speed: 0,
+      heading: 0,
       lastUpdate: new Date().toISOString(),
       online: true,
+      startedAt: trip.startedAt,
     };
-    state.buses.set(bus.id, updated);
-    io.emit("bus:moved", {
-      busId: bus.id,
-      routeId: bus.routeId,
-      plate: bus.plate,
-      lat: updated.lat,
-      lng: updated.lng,
-      speed: updated.speed,
-      heading: updated.heading,
-      lastUpdate: updated.lastUpdate,
-    });
+    state.buses.set(bus.id, bus);
+    io.emit("buses:updated", [...state.buses.values()]);
+    console.log(
+      `[driver] ${bus.driverName}${bus.plate ? ` (${bus.plate})` : ""} voltou ao mapa — viagem ${tripId} remontada a partir do banco`
+    );
   }
+
+  const updated = {
+    ...bus,
+    lat: last.lat,
+    lng: last.lng,
+    speed: last.speed || 0,
+    heading: last.heading || 0,
+    lastUpdate: new Date().toISOString(),
+    online: true,
+  };
+  state.buses.set(bus.id, updated);
+  io.emit("bus:moved", {
+    busId: bus.id,
+    routeId: bus.routeId,
+    plate: bus.plate,
+    lat: updated.lat,
+    lng: updated.lng,
+    speed: updated.speed,
+    heading: updated.heading,
+    lastUpdate: updated.lastUpdate,
+  });
 
   // Chegou posição por HTTP: o motorista está em viagem, então não encerra por inatividade
   const pendingClose = pendingTripCloses.get(tripId);
@@ -420,12 +496,55 @@ app.get("/api/trips/:id/locations", requireAdmin, (req, res) => {
   res.json(getTripLocations(req.params.id, { limit: req.query.limit }));
 });
 
-// ─── App do motorista (build de produção, se existir) ─────────────────────────
-const driverDist = join(__dirname, "..", "..", "frontend-driver", "dist");
-if (existsSync(driverDist)) {
-  app.use("/driver", express.static(driverDist));
-  app.get("/driver/*", (req, res) => res.sendFile(join(driverDist, "index.html")));
-  console.log("🚐 App do motorista servido em /driver");
+// ─── Frontends (builds de produção, quando existem) ───────────────────────────
+// Servir os três pelo próprio backend deixa tudo atrás de um endereço só: o túnel
+// expõe apenas a 3001 e os apps falam em same-origin — sem CORS e sem endereço
+// embutido no build, então trocar a URL do servidor não obriga a recompilar nada.
+const webRoot = join(__dirname, "..", "..");
+const webApps = [
+  { name: "Site do passageiro", mount: "/",       dir: join(webRoot, "frontend-user", "dist") },
+  { name: "Painel admin",       mount: "/admin",  dir: join(webRoot, "frontend-admin", "dist") },
+  { name: "App do motorista",   mount: "/motorista", dir: join(webRoot, "frontend-driver", "dist") },
+];
+
+// Download do APK: o motorista abre este endereço no celular e instala direto,
+// sem cabo nem Play Store. Só aparece quando existe um build gerado.
+const apkPath = join(
+  webRoot, "frontend-driver", "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"
+);
+app.get("/bustrack.apk", (_req, res) => {
+  if (!existsSync(apkPath)) {
+    return res.status(404).json({ error: "APK ainda não foi gerado" });
+  }
+  res.download(apkPath, "bustrack-motorista.apk");
+});
+
+// Endereço antigo, de quando as páginas usavam nomes em inglês. As rotas de API
+// (/api/driver/...) continuam como estão — mudá-las quebraria os APKs instalados.
+app.get(["/driver", "/driver/*"], (req, res) =>
+  res.redirect(302, `/motorista${req.path.slice("/driver".length)}`)
+);
+
+// As sub-rotas vêm primeiro: montar "/" antes engoliria /admin e /motorista
+const served = [];
+for (const { name, mount, dir } of webApps) {
+  if (mount === "/" || !existsSync(dir)) continue;
+  app.use(mount, express.static(dir));
+  app.get(`${mount}/*`, (_req, res) => res.sendFile(join(dir, "index.html")));
+  served.push(`${name} → ${mount}`);
+}
+
+const userDist = webApps[0].dir;
+if (existsSync(userDist)) {
+  app.use(express.static(userDist));
+  // Fallback do SPA. /api fica de fora para responder 404 de verdade em vez de HTML.
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+    res.sendFile(join(userDist, "index.html"));
+  });
+  served.unshift(`${webApps[0].name} → /`);
+} else if (existsSync(webApps[2].dir)) {
+  app.get("/", (_req, res) => res.redirect("/motorista"));
 }
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
@@ -721,8 +840,34 @@ function finishDriver(socketId, { graceful }) {
   );
 }
 
+// Tira do mapa os ônibus sem socket que pararam de mandar posição. Quem tem socket
+// já é tratado no `disconnect`, então não entra na varredura.
+setInterval(() => {
+  const cutoff = Date.now() - ORPHAN_BUS_TIMEOUT_MS;
+  let changed = false;
+
+  for (const [id, bus] of state.buses) {
+    if (bus.socketId) continue;
+    const seenAt = bus.lastUpdate ? new Date(bus.lastUpdate).getTime() : 0;
+    if (seenAt >= cutoff) continue;
+
+    state.buses.delete(id);
+    changed = true;
+    console.log(`[driver] ônibus ${bus.plate || id} saiu do mapa: sem posição há mais de 3 min`);
+  }
+
+  if (changed) io.emit("buses:updated", [...state.buses.values()]);
+}, 60_000).unref();
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
   console.log(`🚌 BusTrack backend rodando em http://localhost:${PORT}`);
+  for (const line of served) console.log(`   ${line}`);
+  if (orphanTrips) {
+    console.log(`   ${orphanTrips} viagem(ns) abandonada(s) fechada(s) na inicialização`);
+  }
+  if (served.length < 3) {
+    console.log("   (rode `npm run build:all` na raiz para servir os três frontends)");
+  }
 });

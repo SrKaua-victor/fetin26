@@ -1,5 +1,8 @@
 /* ───────────────── Design tokens ───────────────── */
 :root {
+  /* Deixa barras de rolagem e controles nativos acompanharem o tema */
+  color-scheme: light dark;
+
   --bg: #eef1f7;
   --surface: #ffffff;
   --surface2: #f4f6fb;
@@ -179,6 +182,119 @@ select.field {
   background-repeat: no-repeat;
   background-position: right 15px center;
   padding-right: 48px;
+}
+
+/* ───────────────── Seletores (placa / linha) ───────────────── */
+.picker-wrap + .picker-wrap { margin-top: 18px; }
+
+.picker {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 66px;
+  padding: 11px 14px;
+  text-align: left;
+  background: var(--surface2);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.12s ease;
+}
+.picker:active:not(:disabled) { transform: scale(0.985); }
+.picker-filled { background: var(--surface); border-color: var(--border-strong); }
+.picker:focus-visible,
+.picker[aria-expanded="true"] {
+  outline: none;
+  background: var(--surface);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-soft);
+}
+.picker:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.picker-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--surface3);
+  color: var(--text-muted);
+  transition: background 0.2s, color 0.2s;
+}
+.picker-filled .picker-badge { background: var(--primary-soft); color: var(--primary-strong); }
+
+.picker-body { flex: 1; min-width: 0; display: block; }
+.picker-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-title-mono { letter-spacing: 0.05em; }
+.picker-title-empty { font-weight: 600; letter-spacing: 0; color: var(--text-muted); }
+.picker-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-chevron { color: var(--text-muted); flex-shrink: 0; transition: transform 0.22s ease; }
+.picker[aria-expanded="true"] .picker-chevron { transform: rotate(180deg); }
+
+/* Folha de escolha */
+.picker-sheet-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+.picker-list {
+  /* Sangra a rolagem até a borda da folha sem cortar o anel de foco */
+  margin: 0 -8px;
+  padding: 2px 8px;
+  max-height: min(52vh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.picker-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 13px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background 0.15s;
+}
+.picker-option + .picker-option { margin-top: 4px; }
+.picker-option:hover { background: var(--surface2); }
+.picker-option:focus-visible { outline: none; background: var(--surface2); box-shadow: 0 0 0 2.5px var(--primary); }
+.picker-option-on,
+.picker-option-on:hover { background: var(--primary-soft); }
+
+.picker-check {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .btn {

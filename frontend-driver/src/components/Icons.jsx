@@ -27,6 +27,7 @@ export const Power    = (p) => <Icon {...p}><path d="M12 3v9"/><path d="M6.5 6.8
 export const Signal   = (p) => <Icon {...p}><path d="M3 20h.01M8 20v-5M13 20V9M18 20V4"/></Icon>;
 export const Alert    = (p) => <Icon {...p}><path d="M12 3.5 22 20H2L12 3.5Z"/><path d="M12 10v4M12 17h.01"/></Icon>;
 export const Check    = (p) => <Icon {...p}><path d="m5 12 5 5 9-12"/></Icon>;
+export const ChevronDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
 export const Loader   = (p) => <Icon {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></Icon>;
 export const Target   = (p) => <Icon {...p}><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></Icon>;
 export const Database = (p) => <Icon {...p}><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></Icon>;
