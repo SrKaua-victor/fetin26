@@ -109,23 +109,28 @@ Placas de exemplo: `ABC1D23`, `BUS2A45`, `XYZ7K89`. Para cadastrar as suas, use 
 
 ### Instalando o APK no celular
 
-O APK pronto fica em:
+Com o backend rodando, o jeito mais simples é abrir no navegador do celular:
+
+```
+https://bustrack.capybara-pence.ts.net/bustrack.apk
+```
+
+O Android vai pedir para permitir a instalação de fontes desconhecidas — é normal para APK
+fora da Play Store. Sem depender do servidor, o arquivo também fica em:
 
 ```
 frontend-driver/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Passe para o celular (cabo, Google Drive, WhatsApp) e abra o arquivo. O Android vai pedir
-para permitir a instalação de fontes desconhecidas — é normal para APK fora da Play Store.
-Com o celular ligado por USB e a depuração ativada, dá para instalar direto:
+Dá para passar por cabo, Google Drive ou WhatsApp — ou instalar direto com o celular ligado
+por USB e a depuração ativada:
 
 ```bash
 adb install -r frontend-driver/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Na primeira tela o app pergunta o **endereço do servidor** (ex: `192.168.0.10:3001`). O valor
-que vem preenchido é o IP da máquina em que o APK foi gerado; se o backend mudar de IP, toque
-em *Servidor* embaixo do botão Entrar e corrija. Celular e servidor precisam estar na mesma rede.
+O **endereço do servidor já vem embutido** no build (`VITE_SERVER_URL`), então o motorista
+só faz login. Para apontar para outro servidor, toque em *Servidor* embaixo do botão Entrar.
 
 ### Permissões que o app pede
 

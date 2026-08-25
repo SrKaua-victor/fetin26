@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getVehicles } from "../lib/api";
+import PickerField from "../components/PickerField";
 import { Alert, Bus, Loader, LogOut, Play, Route, WifiOff } from "../components/Icons";
 
 export default function SetupScreen({ driver, routes, connected, onStart, onSignOut }) {
@@ -23,7 +24,31 @@ export default function SetupScreen({ driver, routes, connected, onStart, onSign
       .finally(() => setLoadingVehicles(false));
   }, []);
 
-  const activeRoutes = routes.filter((r) => r.active !== false);
+  const activeRoutes = useMemo(() => routes.filter((r) => r.active !== false), [routes]);
+
+  const vehicleOptions = useMemo(
+    () =>
+      vehicles.map((v) => ({
+        value: v.id,
+        title: v.plate,
+        subtitle: [v.model, v.capacity ? `${v.capacity} lugares` : null].filter(Boolean).join(" · "),
+        mono: true,
+      })),
+    [vehicles]
+  );
+
+  const routeOptions = useMemo(
+    () =>
+      activeRoutes.map((r) => ({
+        value: r.id,
+        title: r.name,
+        subtitle: r.stops?.length
+          ? `${r.stops.length} ${r.stops.length === 1 ? "parada" : "paradas"}`
+          : null,
+        color: r.color,
+      })),
+    [activeRoutes]
+  );
 
   useEffect(() => {
     const last = localStorage.getItem("bustrack.driver.lastRoute");
@@ -48,8 +73,6 @@ export default function SetupScreen({ driver, routes, connected, onStart, onSign
     }
   }
 
-  const vehicle = vehicles.find((v) => v.id === vehicleId);
-  const route = activeRoutes.find((r) => r.id === routeId);
   const ready = vehicleId && routeId && connected && !starting;
   const initials = (driver?.name || "?")
     .split(" ")
@@ -83,46 +106,31 @@ export default function SetupScreen({ driver, routes, connected, onStart, onSign
 
       <div className="content content-overlap">
         <div className="card fade-in">
-          <label className="label" htmlFor="vehicle">
-            Placa do ônibus
-          </label>
-          <select
+          <PickerField
             id="vehicle"
-            className="field"
+            label="Placa do ônibus"
+            icon={<Bus size={19} />}
             value={vehicleId}
-            onChange={(e) => setVehicleId(e.target.value)}
-            disabled={loadingVehicles || vehicles.length === 0}
-          >
-            <option value="">
-              {loadingVehicles ? "Carregando placas…" : "Selecione a placa"}
-            </option>
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.plate}
-                {v.model ? ` — ${v.model}` : ""}
-              </option>
-            ))}
-          </select>
+            options={vehicleOptions}
+            onChange={setVehicleId}
+            placeholder="Selecione a placa"
+            sheetTitle="Escolha a placa"
+            loading={loadingVehicles}
+            loadingText="Carregando placas…"
+            emptyText="Nenhum veículo cadastrado"
+          />
 
-          <label className="label" htmlFor="route" style={{ marginTop: 20 }}>
-            Linha
-          </label>
-          <select
+          <PickerField
             id="route"
-            className="field"
+            label="Linha"
+            icon={<Route size={19} />}
             value={routeId}
-            onChange={(e) => setRouteId(e.target.value)}
-            disabled={activeRoutes.length === 0}
-          >
-            <option value="">
-              {activeRoutes.length === 0 ? "Nenhuma linha disponível" : "Selecione a linha"}
-            </option>
-            {activeRoutes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+            options={routeOptions}
+            onChange={setRouteId}
+            placeholder="Selecione a linha"
+            sheetTitle="Escolha a linha"
+            emptyText="Nenhuma linha disponível"
+          />
 
           {!loadingVehicles && vehicles.length === 0 && (
             <div className="alert alert-warn" style={{ marginTop: 18 }}>
@@ -137,29 +145,6 @@ export default function SetupScreen({ driver, routes, connected, onStart, onSign
               <span>{error}</span>
             </div>
           )}
-        </div>
-
-        {/* Confirmação do que vai entrar em serviço */}
-        <div style={S.preview}>
-          <div style={S.previewItem}>
-            <span style={S.previewIcon(!!vehicle)}>
-              <Bus size={17} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div className="tile-label" style={{ marginBottom: 2 }}>Veículo</div>
-              <div style={S.previewValue(!!vehicle)}>{vehicle?.plate || "não selecionado"}</div>
-            </div>
-          </div>
-          <div style={S.previewDivider} />
-          <div style={S.previewItem}>
-            <span style={S.previewIcon(!!route)}>
-              <Route size={17} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div className="tile-label" style={{ marginBottom: 2 }}>Linha</div>
-              <div style={S.previewValue(!!route)}>{route?.name || "não selecionada"}</div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -223,36 +208,6 @@ const S = {
     flexShrink: 0,
   },
   alertIcon: { flexShrink: 0, marginTop: 1 },
-  preview: {
-    background: "var(--surface2)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius)",
-    padding: "4px 18px",
-  },
-  previewItem: { display: "flex", alignItems: "center", gap: 13, padding: "14px 0" },
-  previewIcon: (filled) => ({
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    background: filled ? "var(--primary-soft)" : "var(--surface3)",
-    color: filled ? "var(--primary-strong)" : "var(--text-muted)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    transition: "background 0.2s, color 0.2s",
-  }),
-  previewValue: (filled) => ({
-    fontFamily: "var(--font-display)",
-    fontWeight: 800,
-    fontSize: 15,
-    letterSpacing: "-0.01em",
-    color: filled ? "var(--text)" : "var(--text-muted)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  }),
-  previewDivider: { height: 1, background: "var(--border)" },
   hint: {
     marginTop: 12,
     textAlign: "center",

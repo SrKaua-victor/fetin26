@@ -2,6 +2,9 @@
 # É recriado sozinho na primeira execução do backend.
 backend/data/
 
+# Log do servidor quando ele sobe pelo start-backend.cmd
+backend/server.log
+
 # Saídas de build do Android (centenas de MB, tudo gerado por `npm run build:apk`)
 frontend-driver/android/build/
 frontend-driver/android/app/build/

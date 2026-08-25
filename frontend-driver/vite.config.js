@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
-// O app é servido em /driver quando roda a partir do build no backend.
+// O app é servido em /motorista quando roda a partir do build no backend.
 // Em dev, o proxy manda /api e /socket.io para o backend na 3001 — assim o app
 // funciona igual no localhost, no celular pela rede local e em HTTPS.
 //

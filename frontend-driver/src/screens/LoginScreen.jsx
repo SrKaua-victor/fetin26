@@ -98,7 +98,7 @@ export default function LoginScreen({ onSignIn, serverUrl, onServerChange }) {
                   inputMode="url"
                   autoCapitalize="none"
                   autoCorrect="off"
-                  placeholder="192.168.0.10:3001"
+                  placeholder="https://meu-servidor.exemplo.com"
                   value={server}
                   onChange={(e) => setServer(e.target.value)}
                   disabled={loading}

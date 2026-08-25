@@ -12,12 +12,21 @@ const SERVER_KEY = "bustrack.driver.server";
 // Os dois casos saem do mesmo `dist`, por isso a decisão é em tempo de execução.
 const DEFAULT_SERVER = isNative ? import.meta.env.VITE_SERVER_URL || "" : "";
 
-/** Normaliza o que o motorista digitar: "192.168.0.5:3001" → "http://192.168.0.5:3001" */
+/**
+ * Normaliza o que o motorista digitar:
+ *   "192.168.0.5:3001" → "http://192.168.0.5:3001"   (rede local, sem certificado)
+ *   "meu-servidor.com" → "https://meu-servidor.com"  (servidor publicado)
+ *
+ * O padrão antigo era http:// para tudo, de quando o servidor só existia na rede
+ * local. Com o backend publicado na internet isso quebrava o login de quem digitava
+ * só o nome do host — e o erro que aparecia mandava conferir se estava "na mesma rede".
+ */
 export function normalizeServerUrl(value) {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
   if (!trimmed) return "";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `http://${trimmed}`;
+  const isLocal = /^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?$/i.test(trimmed);
+  return `${isLocal ? "http" : "https"}://${trimmed}`;
 }
 
 export function getServerUrl() {
@@ -55,7 +64,7 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   } catch {
     throw new Error(
       isNative
-        ? "Servidor não encontrado. Confira o endereço e se o celular está na mesma rede."
+        ? `Não foi possível falar com ${getServerUrl() || "o servidor"}. Toque em Servidor, abaixo do botão Entrar, para conferir o endereço.`
         : "Não foi possível falar com o servidor"
     );
   }

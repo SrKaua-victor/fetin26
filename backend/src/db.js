@@ -312,18 +312,29 @@ export function endTrip(id) {
   return getTrip(id);
 }
 
-/** Fecha viagens que ficaram abertas (ex: backend reiniciou no meio de um percurso). */
-export function closeOrphanTrips() {
+/**
+ * Fecha viagens que ficaram abertas e sem atividade (ex: o backend caiu no meio de
+ * um percurso e ninguém voltou). O fim registrado é a última posição gravada.
+ *
+ * Só entram as paradas há mais de `staleMinutes`. Fechar todas as viagens abertas
+ * seria errado: quem está rodando agora precisa da viagem aberta para o app retomá-la
+ * na reconexão e para o ônibus voltar ao mapa quando as posições chegam por HTTP —
+ * com a viagem fechada, `POST /api/driver/locations` responderia 409.
+ */
+export function closeOrphanTrips({ staleMinutes = 15 } = {}) {
+  const cutoff = new Date(Date.now() - staleMinutes * 60_000).toISOString();
+  const lastSeen = `COALESCE(
+     (SELECT MAX(recorded_at) FROM locations WHERE locations.trip_id = trips.id),
+     started_at
+   )`;
   const result = db
     .prepare(
       `UPDATE trips
-          SET ended_at = COALESCE(
-            (SELECT MAX(recorded_at) FROM locations WHERE locations.trip_id = trips.id),
-            started_at
-          )
-        WHERE ended_at IS NULL`
+          SET ended_at = ${lastSeen}
+        WHERE ended_at IS NULL
+          AND ${lastSeen} < ?`
     )
-    .run();
+    .run(cutoff);
   return result.changes;
 }
 
