@@ -49,8 +49,17 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * O plano gratuito do ngrok intercepta requisições que parecem vir de um
+ * navegador e devolve uma página de aviso no lugar da resposta. Como essa página
+ * não traz cabeçalhos CORS, o fetch falha e o app relata "não foi possível falar
+ * com o servidor" — mesmo com o servidor no ar e o endereço correto. Este header
+ * desliga a interceptação. É ignorado por qualquer outro servidor.
+ */
+const SKIP_TUNNEL_WARNING = { "ngrok-skip-browser-warning": "true" };
+
 async function request(path, { method = "GET", body, auth = false } = {}) {
-  const headers = {};
+  const headers = { ...SKIP_TUNNEL_WARNING };
   if (body) headers["Content-Type"] = "application/json";
   if (auth) headers.Authorization = `Bearer ${getToken()}`;
 

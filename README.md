@@ -15,13 +15,16 @@ Sistema completo de rastreio de ônibus em tempo real, com tema claro estilo Ube
 
 ```
 bustrack/
-├── backend/              # Servidor Node.js (porta 3001) + banco SQLite
-│   └── data/bustrack.db  # Criado sozinho na primeira execução
-├── frontend-user/        # Site do usuário (porta 5173)
-├── frontend-admin/       # Painel admin (porta 5174)
-├── frontend-driver/      # App do motorista (porta 5175 na web)
-│   └── android/          # Projeto Android nativo (Capacitor) → gera o APK
-└── driver-simulator.html # Simula o app do motorista
+├── backend/                  # Servidor Node.js (porta 3001) + banco SQLite
+│   ├── data/bustrack.db      # Criado sozinho na primeira execução
+│   └── start-backend.cmd     # Sobe em produção, com reinício automático
+├── frontend-user/            # Site do passageiro
+├── frontend-admin/           # Painel admin
+├── frontend-driver/          # App do motorista
+│   ├── android/              # Projeto Android nativo (Capacitor) → gera o APK
+│   └── scripts/build-apk.mjs # Build do APK, funciona no cmd e no Git Bash
+├── .env                      # Segredos (fora do Git) — veja .env.example
+└── driver-simulator.html     # Simula o app do motorista
 ```
 
 > **Requisito**: Node 22.5 ou superior. O banco usa o módulo `node:sqlite`, que já vem
@@ -31,51 +34,91 @@ bustrack/
 
 ## 🚀 Subindo o sistema
 
-Você vai precisar de **um terminal por serviço**.
+Há dois modos. **Produção** é um endereço só e um processo só — é como o sistema roda
+de verdade. **Desenvolvimento** sobe cada frontend na sua porta, com hot reload.
 
-### 1. Backend
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-Servidor sobe em `http://localhost:3001`.
-
-### 2. Frontend do Usuário
+### Antes de tudo: os segredos
 
 ```bash
-cd frontend-user
-npm install
-npm run dev
+cp .env.example .env
 ```
 
-Abra `http://localhost:5173`.
+Abra o `.env` e defina `ADMIN_PASSWORD` e `AUTH_SECRET` com valores fortes. Sem isso o
+painel fica com a senha padrão `admin123` — aceitável no seu computador, **nunca** com o
+servidor exposto na internet. O `.env` está no `.gitignore`.
 
-### 3. Painel Admin
+### Modo produção — recomendado
 
 ```bash
-cd frontend-admin
-npm install
-npm run dev
+npm run install:all     # na raiz, instala os quatro projetos
+npm run build:all       # gera o dist dos três frontends
+cd backend && npm start
 ```
 
-Entre com `admin` / `admin123` no primeiro uso. Antes de colocar o sistema em uma
-rede pública, copie `.env.example` para `.env` e defina `ADMIN_PASSWORD` e
-`AUTH_SECRET` com valores fortes. A API pode ser verificada em `http://localhost:3001/health`.
+O backend serve tudo em `http://localhost:3001`:
 
-Abra `http://localhost:5174`.
+| Caminho      | Aplicação           |
+|--------------|---------------------|
+| `/`          | Site do passageiro  |
+| `/admin`     | Painel admin        |
+| `/motorista` | App do motorista    |
+| `/bustrack.apk` | Download do APK  |
 
-### 4. App do Motorista
+Servir os três pelo mesmo processo não é só conveniência: com um endereço só, os
+frontends falam em **same-origin**, então não há CORS e **nenhum deles precisa saber o
+endereço do servidor**. Trocar o endereço público não obriga a recompilar nada.
+
+No Windows, `backend/start-backend.cmd` sobe o servidor com reinício automático em caso
+de queda e log em `backend/server.log`. Um atalho para ele na pasta *Inicializar* faz o
+sistema voltar sozinho depois de reiniciar a máquina.
+
+### Modo desenvolvimento
+
+Um terminal por serviço, ou `npm run dev` na raiz para os quatro de uma vez:
 
 ```bash
-cd frontend-driver
-npm install
-npm run dev
+cd backend        && npm run dev    # http://localhost:3001
+cd frontend-user  && npm run dev    # http://localhost:5173
+cd frontend-admin && npm run dev    # http://localhost:5174
+cd frontend-driver && npm run dev   # http://localhost:5175
 ```
 
-Abra `http://localhost:5175`.
+Nesse modo o Vite faz proxy de `/api` e `/socket.io` para a 3001. A API pode ser
+conferida em `http://localhost:3001/health`.
+
+### Variáveis do `.env`
+
+| Variável | Para quê |
+|---|---|
+| `PORT` | Porta do backend (padrão 3001) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Login do painel admin |
+| `AUTH_SECRET` | Assina os tokens. Trocar desloga todo mundo na hora |
+| `ALLOW_LEGACY_SIMULATOR` | `1` libera o `driver-simulator.html`, que entra sem login |
+| `LOG_API` | `1` loga cada chamada de API com status, IP e User-Agent |
+
+---
+
+## 🌐 Publicando na internet
+
+Para o app do motorista funcionar fora da rede local, o backend precisa de um endereço
+público. Basta expor a **porta 3001** — ela já entrega os três frontends e a API.
+
+Qualquer túnel serve (Cloudflare Tunnel, ngrok). Com [Tailscale
+Funnel](https://tailscale.com/kb/1223/funnel), que dá HTTPS e endereço fixo de graça:
+
+```bash
+tailscale funnel --bg 3001
+```
+
+O HTTPS não é detalhe: **o GPS do navegador só funciona em conexão segura**, então é ele
+que permite usar o app do motorista como PWA no celular, sem gerar APK.
+
+Se o endereço mudar (renomear a máquina ou o tailnet), reaplique com
+`tailscale serve reset` antes de religar o funnel — um `funnel off` sozinho não limpa a
+configuração presa ao nome antigo.
+
+> ⚠️ Exposto na internet, `/admin` e `/api/driver/login` ficam alcançáveis por qualquer
+> um. Defina `ADMIN_PASSWORD` forte e troque as senhas dos motoristas de exemplo.
 
 ---
 
@@ -203,18 +246,32 @@ SQLite, em `backend/data/bustrack.db`. Criado e populado sozinho na primeira exe
 |-------------|---------------------------------------------------------------------------|
 | `drivers`   | Motoristas: nome, matrícula, senha (hash scrypt), telefone, ativo         |
 | `vehicles`  | Frota: placa, modelo, lotação, ativo                                      |
+| `routes`    | Linhas: nome, cor, paradas e traçado (JSON), ativa                       |
 | `trips`     | Viagens: motorista, placa, linha, início, fim, nº de pontos, distância    |
 | `locations` | Cada posição do GPS: lat, lng, velocidade, direção, precisão, horário     |
-| `settings`  | Configuração interna (segredo usado para assinar os tokens de login)      |
+| `settings`  | Segredo dos tokens e hash da senha do admin                              |
+
+Roda em modo **WAL** (leitura não trava escrita), com `foreign_keys` ligado: apagar uma
+viagem leva junto suas posições, sem deixar registro órfão. Há índices em
+`locations(trip_id, id)`, `trips(ended_at)` e `trips(started_at DESC)`.
+
+**Tudo é persistido** — frota, motoristas, linhas e histórico. Só a lista de ônibus *ao
+vivo* fica em memória, o que é natural: ela representa quem está transmitindo agora.
 
 **Gravação com throttle**: a posição é transmitida ao vivo a cada leitura do GPS, mas só vai
 para o banco quando o ônibus anda 15 m (respeitando 2 s entre gravações), mais um registro a
-cada 30 s com o ônibus parado. Isso evita encher a tabela com milhares de pontos repetidos.
+cada 30 s com o ônibus parado. Isso evita encher a tabela com milhares de pontos repetidos —
+na prática dá ~140 posições por hora de viagem, em vez de milhares.
+
+**Viagens abandonadas**: na inicialização o backend fecha as viagens que ficaram abertas,
+usando o horário da última posição registrada. Só entram as paradas há mais de 15 minutos —
+quem está rodando naquele momento precisa da viagem aberta para o app retomá-la ao
+reconectar.
 
 Para zerar o banco, apague a pasta `backend/data/` e reinicie o backend.
 
-**As rotas continuam em memória** — só o cadastro da frota, os motoristas e o histórico de
-posições são persistidos. Reiniciar o backend volta as rotas para o exemplo padrão.
+> Não há rotina de backup. O arquivo guarda motoristas, frota, linhas e todo o histórico;
+> vale copiar `backend/data/` para outro lugar de tempos em tempos.
 
 ---
 
@@ -226,17 +283,22 @@ backend via Socket.IO — e as posições também são gravadas no banco, como a
 A diferença é que o simulador não faz login nem escolhe placa: a viagem fica sem motorista
 e sem veículo vinculados.
 
+> **Vem desligado.** Justamente por entrar sem autenticação, o simulador só é aceito com
+> `ALLOW_LEGACY_SIMULATOR=1` no `.env`. Sem isso o servidor responde *"Autenticação
+> obrigatória"*. **Mantenha em `0` sempre que o servidor estiver exposto na internet** —
+> caso contrário qualquer pessoa consegue colocar ônibus fantasmas no seu mapa.
+
 ### Passo a passo
 
 1. **Certifique-se que o backend está rodando** (porta 3001). O simulador conecta direto nele.
-2. **No painel admin** (5174), tenha pelo menos uma rota com traçado e ativa. Se for primeira execução, já existe a *“Linha 01 - Centro / Terminal”* de exemplo.
+2. **No painel admin**, tenha pelo menos uma rota com traçado e ativa. Se for primeira execução, já existe a *“Linha 01 - Centro / Terminal”* de exemplo.
 3. **Abra o arquivo `bustrack/driver-simulator.html`** dando duplo clique nele (ou arrastando pro navegador). Não precisa servidor: ele abre como `file://`.
 4. **Preencha no simulador**:
    - **Nome do motorista** — qualquer texto, ex: `João`
    - **Rota** — selecione a linha que você quer simular
 5. **Clique em “Iniciar percurso”**. O simulador começa a interpolar a posição do ônibus seguindo os waypoints da rota e envia atualizações a cada segundo.
-6. **Abra `http://localhost:5173`** (frontend-user) — você verá o ônibus se movendo no mapa em tempo real, com ETA atualizando e a próxima parada destacada na timeline.
-7. **No admin (5174)**, na aba *Rotas* → selecione a mesma linha → veja o card flutuante do ônibus com velocidade, lotação estimada e ETA na parte de baixo do mapa.
+6. **Abra o site do passageiro** — você verá o ônibus se movendo no mapa em tempo real, com ETA atualizando e a próxima parada destacada na timeline.
+7. **No admin**, na aba *Rotas* → selecione a mesma linha → veja o card flutuante do ônibus com velocidade, lotação estimada e ETA na parte de baixo do mapa.
 
 ### Múltiplos ônibus simultâneos
 
@@ -250,7 +312,9 @@ Quer ver várias linhas com vários ônibus rodando ao mesmo tempo?
 
 - Botão **“Parar”** no simulador → marca o ônibus como offline.
 - Fechar a aba → mesma coisa (desconecta o socket).
-- Reiniciar o backend → todos os ônibus somem (estado em memória).
+- Reiniciar o backend → os ônibus simulados somem do mapa até o simulador reconectar.
+  Isso vale para o simulador, que fala só por socket; um motorista no app real volta a
+  aparecer sozinho, remontado a partir da viagem no banco.
 
 ### Dicas de teste
 
@@ -297,38 +361,55 @@ Quer ver várias linhas com vários ônibus rodando ao mesmo tempo?
 
 ## 📡 API
 
+Endpoints marcados com 🔒 exigem `Authorization: Bearer <token>` de **admin**; os marcados
+com 🚌 exigem token de **motorista**. O resto é público — é o que o site do passageiro lê.
+
+### REST — autenticação
+
+- `POST /api/admin/login` — `{ username, password }` → `{ token, user }`
+- `POST /api/driver/login` — `{ registration, password }` → `{ token, driver }`
+
+Os dois têm limite de 10 tentativas por minuto **por IP**. Atrás de um túnel isso depende do
+`trust proxy` configurado no backend, que recupera o IP real do `X-Forwarded-For`.
+
 ### REST — rotas e ônibus
 
 - `GET /api/routes` — lista rotas
-- `POST /api/routes` — cria rota (aceita `name`, `color`, `stops`, `path`, `anchors`, `schedule`, `active`)
-- `PUT /api/routes/:id` — atualiza rota
-- `DELETE /api/routes/:id` — remove rota
-- `GET /api/buses` — lista ônibus ativos (agora com `plate`, `driverId` e `tripId`)
+- `POST /api/routes` 🔒 — cria rota (aceita `name`, `color`, `stops`, `path`, `anchors`, `schedule`, `active`)
+- `PUT /api/routes/:id` 🔒 — atualiza rota
+- `DELETE /api/routes/:id` 🔒 — remove rota
+- `GET /api/buses` — lista ônibus ativos (com `plate`, `driverId` e `tripId`)
 
 ### REST — motorista
 
-- `POST /api/driver/login` — `{ registration, password }` → `{ token, driver }`
-- `GET /api/driver/me` — dados do motorista logado (header `Authorization: Bearer <token>`)
-- `POST /api/driver/locations` — `{ tripId, points[] }` → `{ ok, received, saved }`
+- `GET /api/driver/me` 🚌 — dados do motorista logado
+- `POST /api/driver/locations` 🚌 — `{ tripId, points[] }` → `{ ok, received, saved }`
   Usada pelo app Android quando está em segundo plano. Depois de alguns minutos com a tela
   apagada o Android estrangula as requisições que saem da WebView, e o socket para de
   entregar; por isso o app troca para HTTP nativo, que não sofre esse limite. O servidor
   grava as posições e continua emitindo `bus:moved`, então o mapa não percebe diferença.
+  Se o ônibus não estiver mais na lista ao vivo — o backend reiniciou no meio do percurso —
+  ele é remontado a partir da viagem no banco, e volta ao mapa sem o app fazer nada.
 
 ### REST — frota
 
 - `GET /api/vehicles` — lista veículos (`?active=1` traz só os ativos)
-- `POST /api/vehicles` — cria veículo `{ plate, model?, capacity?, active? }`
-- `PUT /api/vehicles/:id` · `DELETE /api/vehicles/:id`
-- `GET /api/drivers` — lista motoristas (sem a senha)
-- `POST /api/drivers` — cria motorista `{ name, registration, password, phone? }`
-- `PUT /api/drivers/:id` · `DELETE /api/drivers/:id`
+- `POST /api/vehicles` 🔒 — cria veículo `{ plate, model?, capacity?, active? }`
+- `PUT /api/vehicles/:id` 🔒 · `DELETE /api/vehicles/:id` 🔒
+- `GET /api/drivers` 🔒 — lista motoristas (sem a senha)
+- `POST /api/drivers` 🔒 — cria motorista `{ name, registration, password, phone? }`
+- `PUT /api/drivers/:id` 🔒 · `DELETE /api/drivers/:id` 🔒
 
 ### REST — histórico
 
-- `GET /api/trips` — viagens (`?limit=`, `?driverId=`, `?vehicleId=`, `?routeId=`)
-- `GET /api/trips/:id` — uma viagem
-- `GET /api/trips/:id/locations` — todos os pontos de GPS gravados da viagem
+- `GET /api/trips` 🔒 — viagens (`?limit=`, `?driverId=`, `?vehicleId=`, `?routeId=`)
+- `GET /api/trips/:id` 🔒 — uma viagem
+- `GET /api/trips/:id/locations` 🔒 — todos os pontos de GPS gravados da viagem
+
+### Outros
+
+- `GET /health` — checagem rápida do servidor
+- `GET /bustrack.apk` — baixa o APK do app do motorista, se houver build gerado
 
 ### Socket.IO
 
@@ -353,23 +434,28 @@ ela é encerrada sozinha.
 
 ## 🔜 Próximos passos
 
-1. **Persistir as rotas** — hoje só a frota, os motoristas e as posições ficam no banco
-2. **Login do admin** — o painel ainda é aberto; só o app do motorista tem autenticação
+1. **Trocar as senhas de exemplo** — os motoristas `1001` e `1002` nascem com senha `1234`,
+   documentada aqui. Com o servidor exposto, isso permite abrir viagem e injetar GPS falso
+2. **Backup do banco** — não há nenhuma rotina; hoje o `bustrack.db` é ponto único de falha
 3. **Assinar o APK para release** — o build atual é `debug`, bom para testes e instalação manual;
    para distribuir de verdade (ou publicar na Play Store) falta gerar a keystore e usar `assembleRelease`
-4. **Migrar para PostgreSQL + PostGIS** — rotas como `LINESTRING`, paradas como `POINT`
-5. **ETA por parada** — projeção sobre a polilinha em vez de haversine para a parada mais próxima
-6. **Relatórios de viagem** — usar `trips` e `locations` para pontualidade e quilometragem
-7. **PWA no site do usuário** — instalável no celular, com notificações push
-8. **OSRM próprio** — hospedar instância dedicada para não depender do servidor demo público
+4. **Restringir o CORS** — o Socket.IO aceita qualquer origem (`origin: "*"`)
+5. **Arquivar histórico antigo** — `locations` só cresce; o ritmo é modesto, mas não há expurgo
+6. **Migrar para PostgreSQL + PostGIS** — rotas como `LINESTRING`, paradas como `POINT`
+7. **ETA por parada** — projeção sobre a polilinha em vez de haversine para a parada mais próxima
+8. **Relatórios de viagem** — usar `trips` e `locations` para pontualidade e quilometragem
+9. **PWA no site do usuário** — instalável no celular, com notificações push
+10. **OSRM próprio** — hospedar instância dedicada para não depender do servidor demo público
 
 ---
 
 ## 💡 Observações de projeto
 
-- **Rotas em memória**: reiniciar o backend volta ao exemplo padrão. Frota, motoristas e posições ficam no SQLite.
-- **Viagens órfãs**: se o backend cair no meio de um percurso, na próxima inicialização essas viagens são fechadas com o horário do último ponto registrado.
+- **Um endereço só**: o backend serve os três frontends, então eles falam em same-origin e nenhum carrega o endereço do servidor embutido. O APK é a exceção — ele não tem servidor próprio, por isso aceita `VITE_SERVER_URL` no build e tem a tela *Servidor* para corrigir na mão.
+- **Ônibus ao vivo x banco**: a lista de ônibus no mapa vive em memória; as posições vão para o SQLite. Se o backend reiniciar durante uma viagem, o ônibus é remontado a partir do banco quando a próxima posição chega, e uma varredura tira do mapa quem passa 3 minutos sem transmitir.
+- **Viagens órfãs**: fechadas na inicialização com o horário do último ponto, mas só as paradas há mais de 15 minutos — fechar todas encerraria a viagem de quem está rodando naquele instante.
 - **CORS aberto**: configure o `origin` do Socket.IO em produção.
+- **Atrás de um túnel**: o backend confia no `X-Forwarded-For` apenas quando a conexão vem do loopback. Sem isso o `req.ip` de todo mundo seria `127.0.0.1` e o limite de tentativas de login viraria global, com um usuário bloqueando os outros.
 - **Senha do motorista**: guardada como hash scrypt, nunca em texto puro. O token de login vale 12 h e sobrevive a reinícios do backend (o segredo fica na tabela `settings`).
 - **OSRM público**: o servidor demo tem rate limit (~1 req/s) e não deve ser usado em produção. O frontend tem fallback automático para linha reta se o OSRM falhar.
 - **Suavização do movimento**: o simulador interpola entre waypoints para parecer natural. Um app real teria posições reais do GPS.

@@ -14,6 +14,8 @@ export async function postLocations(tripId, points) {
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${getToken()}`,
+    // Impede o ngrok de responder com a página de aviso em vez da API. Ver api.js.
+    "ngrok-skip-browser-warning": "true",
   };
   const data = { tripId, points };
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, Bus, ChevronDown, Map, Moon, Route, Sun, MapPin, ChartBar, Users } from "./Icons";
+import { Bus, ChevronDown, Map, Moon, Route, Sun, MapPin, ChartBar, Users } from "./Icons";
 
 const styles = {
   bar: {
@@ -90,23 +90,6 @@ const styles = {
     color: "var(--text-soft)",
     background: "transparent",
     transition: "all 0.18s ease",
-  },
-  badge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    minWidth: 16,
-    height: 16,
-    padding: "0 4px",
-    borderRadius: 999,
-    background: "var(--accent)",
-    color: "white",
-    fontSize: 10,
-    fontWeight: 700,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 2px 6px rgba(249,115,22,0.45)",
   },
   status: {
     display: "flex",
@@ -238,10 +221,8 @@ export default function Topbar({ connected, activePage, onNavigate, theme, onTog
           {connected ? "Online" : "Offline"}
         </div>
 
-        <div style={{ position: "relative" }}>
         <button
           style={styles.iconBtn}
-          onClick={() => setOpenMenu((value) => value === "notifications" ? null : "notifications")}
           onClick={onToggleTheme}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -250,22 +231,6 @@ export default function Topbar({ connected, activePage, onNavigate, theme, onTog
         >
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-
-        <button
-          style={styles.iconBtn}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          aria-label="Notificações"
-          title="Notificações"
-        >
-          <Bell size={18} />
-          {!connected && <span style={styles.badge}>1</span>}
-        </button>
-        {openMenu === "notifications" && <div style={styles.menu} role="dialog" aria-label="Notificações">
-          <div style={styles.menuTitle}>Notificações</div>
-          <div style={styles.menuItem}>{connected ? "Sistema conectado e operando normalmente." : "Servidor desconectado. Verifique o backend."}</div>
-        </div>}
-        </div>
 
         <div style={styles.divider} />
 

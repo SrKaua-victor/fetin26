@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import AdminLogin from "./components/AdminLogin";
 import Topbar from "./components/Topbar";
 import RoutesPage from "./pages/RoutesPage";
 import BusesPage from "./pages/BusesPage";
@@ -25,10 +26,24 @@ export default function App() {
     return () => clearInterval(id);
   }, [authenticated]);
 
-  if (!authenticated) return <AdminLogin onLogin={async (username, password) => {
-    try { await adminLogin(username, password); setLoginError(""); setAuthenticated(true); }
-    catch (error) { setLoginError(error.message); }
-  }} error={loginError} />;
+  if (!authenticated) {
+    return (
+      <AdminLogin
+        error={loginError}
+        onLogin={async (username, password) => {
+          try {
+            await adminLogin(username, password);
+            setLoginError("");
+            setAuthenticated(true);
+          } catch (error) {
+            setLoginError(error.message);
+            // Repassa: o formulário precisa saber que falhou para limpar a senha
+            throw error;
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -50,14 +65,3 @@ export default function App() {
   );
 }
 
-function AdminLogin({ onLogin, error }) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
-  return <main style={{maxWidth:360,margin:"12vh auto",padding:24}}><h1>Administração</h1>
-    <form onSubmit={(e) => { e.preventDefault(); onLogin(username, password); }}>
-      <label>Usuário<input className="field" value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" /></label>
-      <label>Senha<input className="field" type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" /></label>
-      {error && <p style={{color:"#b42318"}}>{error}</p>}
-      <button className="btn btn-primary" type="submit" style={{marginTop:16}}>Entrar</button>
-    </form></main>;
-}
