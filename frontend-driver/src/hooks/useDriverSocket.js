@@ -197,6 +197,9 @@ export function useDriverSocket({ token, serverUrl }) {
     const socket = io(serverUrl || undefined, {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      // Vale para o transporte de polling, que é HTTP comum e por isso também
+      // seria interceptado pela página de aviso do ngrok. Ver lib/api.js.
+      extraHeaders: { "ngrok-skip-browser-warning": "true" },
     });
     socketRef.current = socket;
 

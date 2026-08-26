@@ -44,3 +44,5 @@ export const ArrowUp   = (p) => <Icon {...p}><path d="M12 19V5M5 12l7-7 7 7"/></
 export const Move      = (p) => <Icon {...p}><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></Icon>;
 export const Layers    = (p) => <Icon {...p}><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></Icon>;
 export const Eye       = (p) => <Icon {...p}><path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></Icon>;
+export const EyeOff    = (p) => <Icon {...p}><path d="M2 2l20 20"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.7M6.6 6.8A17 17 0 0 0 2 12s4 6 10 6a9.6 9.6 0 0 0 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></Icon>;
+export const Lock      = (p) => <Icon {...p}><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></Icon>;

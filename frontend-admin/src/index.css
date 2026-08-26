@@ -118,11 +118,11 @@ a { color: var(--primary); text-decoration: none; }
   font-family: var(--font-body) !important;
 }
 
-/* Tile claro: grayscale + alto contraste = ruas pretas sobre cinza. */
-.leaflet-tile-pane {
-  filter: grayscale(1) contrast(1.45) brightness(0.94);
-}
-[data-theme="dark"] .leaflet-tile-pane { filter: none; }
+/* Sem filtro no tema claro, de propósito: os tiles do OpenStreetMap já vêm com
+   as cores que dão leitura ao mapa — verde na vegetação, azul na água, vias
+   hierarquizadas por cor. O grayscale que existia aqui foi feito para os tiles
+   do CARTO; sobre o OSM ele apagava justamente essa informação.
+   O tema escuro é tratado em .map-tiles-dark, aplicado na própria camada. */
 
 .leaflet-control-zoom {
   border: none !important;
@@ -442,4 +442,21 @@ a { color: var(--primary); text-decoration: none; }
 }
 @media (max-width: 1024px) {
   :root { --right-w: 0px; }
+}
+
+/* Não existe tile escuro oficial do OpenStreetMap, e o CARTO (que tinha um)
+   passou a exigir chave de API. O tema escuro sai invertendo e recolorindo os
+   tiles claros — o hue-rotate desfaz a inversão de matiz, senão a vegetação
+   ficaria rosa e a água laranja. */
+.map-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.8);
+}
+
+/* O design system não tinha estado desabilitado: um botão bloqueado ficava
+   idêntico a um clicável, sem sinal nenhum de que não ia responder. */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
 }

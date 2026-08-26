@@ -5,17 +5,19 @@ import { Activity, Bus } from "../components/Icons";
 
 const CENTER = [-22.8535, -45.386];
 
+// O CARTO passou a exigir chave de API: sem ela os tiles voltam com "API KEY
+// REQUIRED" carimbado por cima do mapa. Os tiles oficiais do OpenStreetMap são
+// livres e não pedem chave. Como não existe variante escura oficial, o tema dark
+// sai de um filtro CSS aplicado sobre os mesmos tiles (.map-tiles-dark).
+const OSM = {
+  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+};
+
 const TILES = {
-  light: {
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-  },
-  dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-  },
+  light: { ...OSM, className: "" },
+  dark: { ...OSM, className: "map-tiles-dark" },
 };
 
 function shade(hex, percent) {
@@ -71,7 +73,13 @@ export default function LiveMapPage({ buses, routes, theme = "light" }) {
         style={{ width: "100%", height: "100%" }}
         zoomControl={true}
       >
-        <TileLayer key={theme} url={tiles.url} attribution={tiles.attribution} />
+        <TileLayer
+          key={theme}
+          url={tiles.url}
+          attribution={tiles.attribution}
+          className={tiles.className}
+          maxZoom={19}
+        />
 
         {activeRoutes.map((route) => (
           <React.Fragment key={route.id}>
