@@ -323,6 +323,9 @@ export default function Sidebar({
 }) {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("all"); // all | favorites
+  // No celular o painel vira uma folha sobre o mapa; começa recolhida para o
+  // mapa ficar visível de cara. No desktop este estado não tem efeito nenhum.
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const activeBuses = useMemo(() => buses.filter((b) => b.online && b.lat), [buses]);
 
@@ -340,7 +343,17 @@ export default function Sidebar({
   );
 
   return (
-    <aside style={styles.panel}>
+    <aside className={`panel${sheetOpen ? " panel-open" : ""}`} style={styles.panel}>
+      {/* Só aparece no celular, onde o painel vira folha sobre o mapa (ver index.css) */}
+      <button
+        className="sheet-grab"
+        onClick={() => setSheetOpen((v) => !v)}
+        aria-label={sheetOpen ? "Recolher a lista de linhas" : "Expandir a lista de linhas"}
+        aria-expanded={sheetOpen}
+      >
+        <span className="sheet-grab-bar" />
+      </button>
+
       <div style={styles.header}>
         <div style={styles.topRow}>
           <div style={styles.logo}>

@@ -100,22 +100,37 @@ conferida em `http://localhost:3001/health`.
 
 ## 🌐 Publicando na internet
 
-Para o app do motorista funcionar fora da rede local, o backend precisa de um endereço
-público. Basta expor a **porta 3001** — ela já entrega os três frontends e a API.
+O sistema roda em **https://bustrack.app.br**, publicado por um túnel nomeado do
+Cloudflare Tunnel. Basta expor a **porta 3001** — ela já entrega os três frontends e a API.
 
-Qualquer túnel serve (Cloudflare Tunnel, ngrok). Com [Tailscale
-Funnel](https://tailscale.com/kb/1223/funnel), que dá HTTPS e endereço fixo de graça:
+No Windows, `start-tunnel.cmd` sobe o túnel com religamento automático; um atalho para ele
+na pasta *Inicializar* faz o endereço voltar sozinho depois de reiniciar a máquina.
+
+Para reproduzir a configuração em outra máquina:
 
 ```bash
-tailscale funnel --bg 3001
+cloudflared tunnel login                              # autoriza o domínio no navegador
+cloudflared tunnel create bustrack                    # cria o túnel
+cloudflared tunnel route dns bustrack bustrack.app.br # aponta o DNS
+cloudflared tunnel --url http://localhost:3001 run bustrack
 ```
 
 O HTTPS não é detalhe: **o GPS do navegador só funciona em conexão segura**, então é ele
 que permite usar o app do motorista como PWA no celular, sem gerar APK.
 
-Se o endereço mudar (renomear a máquina ou o tailnet), reaplique com
-`tailscale serve reset` antes de religar o funnel — um `funnel off` sozinho não limpa a
-configuração presa ao nome antigo.
+### Por que um túnel nomeado, e não os atalhos gratuitos
+
+Vale registrar, porque as alternativas custam caro em tempo:
+
+- **Quick tunnel** (`cloudflared tunnel --url`) sorteia um nome novo a cada subida. O
+  endereço morre junto com o processo, então não dá para gravar no APK nem em QR code.
+- **ngrok gratuito** tem endereço fixo, mas intercepta requisições que parecem vir de um
+  navegador e responde com uma página de aviso no lugar da API. Como essa página não traz
+  cabeçalhos CORS, o app falha com "não foi possível falar com o servidor" mesmo estando
+  tudo certo.
+- **Tailscale Funnel** dá HTTPS e endereço fixo de graça, mas o domínio `.ts.net` é pouco
+  comum e aparece em listas de bloqueio de DNS — houve aparelho que simplesmente não
+  resolvia o endereço, em qualquer rede.
 
 > ⚠️ Exposto na internet, `/admin` e `/api/driver/login` ficam alcançáveis por qualquer
 > um. Defina `ADMIN_PASSWORD` forte e troque as senhas dos motoristas de exemplo.
@@ -155,7 +170,7 @@ Placas de exemplo: `ABC1D23`, `BUS2A45`, `XYZ7K89`. Para cadastrar as suas, use 
 Com o backend rodando, o jeito mais simples é abrir no navegador do celular:
 
 ```
-https://bustrack.capybara-pence.ts.net/bustrack.apk
+https://github.com/SrKaua-victor/fetin26/releases/latest/download/bustrack-motorista.apk
 ```
 
 O Android vai pedir para permitir a instalação de fontes desconhecidas — é normal para APK

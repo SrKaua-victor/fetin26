@@ -267,7 +267,7 @@ export default function BusDetail({ bus, route, onClose }) {
   })();
 
   return (
-    <aside className="slide-in-right" style={styles.panel}>
+    <aside className="slide-in-right detail-panel" style={styles.panel}>
       <div style={styles.header}>
         <div style={styles.avatar(color)}>
           <Bus size={20} />

@@ -58,6 +58,7 @@ export default function App() {
       />
 
       <div
+        className="map-area"
         style={{
           position: "absolute",
           top: 0,
