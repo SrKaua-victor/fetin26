@@ -1,16 +1,18 @@
 @echo off
-title BusTrack - tunel ngrok (endereco fixo do app)
+title BusTrack - tunel Cloudflare (bustrack.app.br)
 cd /d "%~dp0"
 
-rem Mantem o app do motorista alcancavel de qualquer rede, no endereco fixo que
-rem esta embutido no APK. Sem este tunel o app para de falar com o servidor
-rem depois de um reinicio da maquina, mesmo com o backend rodando.
+rem Publica o backend em https://bustrack.app.br. O tunel e nomeado ("bustrack"),
+rem entao o endereco nao muda entre reinicios — ao contrario do quick tunnel, que
+rem sorteia um nome novo a cada subida. As credenciais ficam em
+rem %USERPROFILE%\.cloudflared\ e sao criadas por `cloudflared tunnel login`.
 
-set NGROK=%LOCALAPPDATA%\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe
+set CF=%ProgramFiles(x86)%\cloudflared\cloudflared.exe
+if not exist "%CF%" set CF=%ProgramFiles%\cloudflared\cloudflared.exe
 
-if not exist "%NGROK%" (
-  echo ngrok nao encontrado em "%NGROK%" >> tunnel.log
-  echo Instale com: winget install ngrok.ngrok >> tunnel.log
+if not exist "%CF%" (
+  echo cloudflared nao encontrado >> tunnel.log
+  echo Instale com: winget install Cloudflare.cloudflared >> tunnel.log
   timeout /t 20 /nobreak >nul
   exit /b 1
 )
@@ -20,8 +22,8 @@ for %%A in (tunnel.log) do if %%~zA GTR 5000000 del tunnel.log
 
 :loop
 echo. >> tunnel.log
-echo === %date% %time% - subindo tunel === >> tunnel.log
-"%NGROK%" http --url=https://hatless-harmonize-fragment.ngrok-free.dev 3001 --log=stdout --log-format=logfmt >> tunnel.log 2>&1
+echo === %date% %time% - subindo tunel bustrack.app.br === >> tunnel.log
+"%CF%" tunnel --url http://localhost:3001 run bustrack >> tunnel.log 2>&1
 echo === %date% %time% - tunel caiu (codigo %errorlevel%), religando em 10s === >> tunnel.log
 timeout /t 10 /nobreak >nul
 goto loop
