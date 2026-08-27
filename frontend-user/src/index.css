@@ -299,8 +299,76 @@ input { font-family: inherit; }
 }
 
 /* ───────────────── Responsive ───────────────── */
+
+/* A alça só existe no celular, onde o painel vira folha. */
+.sheet-grab { display: none; }
+
 @media (max-width: 900px) {
-  :root { --panel-w: 100vw; --detail-w: 100vw; }
+  /* O mapa passa a ocupar a tela inteira. Antes o painel media 100vw e o mapa
+     ficava posicionado em `left: var(--panel-w)`, ou seja, empurrado para fora
+     da viewport — no celular o mapa simplesmente não aparecia. */
+  :root { --panel-w: 0px; --detail-w: 100vw; }
+
+  .map-area { left: 0 !important; }
+
+  /* Painel vira folha inferior sobre o mapa, no lugar de coluna à esquerda.
+     Os !important existem porque essas propriedades vêm de estilos inline no
+     componente, que de outro modo venceriam a folha de estilo. */
+  .panel {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 70dvh !important;
+    border-right: none !important;
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    /* Recolhida, mostra só a alça e o cabeçalho */
+    transform: translateY(calc(70dvh - 168px));
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .panel-open { transform: translateY(0); }
+
+  .sheet-grab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    /* Alvo de toque confortável, mesmo com a barra visual sendo fina */
+    height: 26px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sheet-grab-bar {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong, rgba(15, 23, 42, 0.18));
+  }
+
+  /* Sobe a atribuição para acima da folha recolhida. O painel é translúcido, e
+     sem isto o texto do Leaflet aparecia atravessando o fundo dele. */
+  .leaflet-control-attribution {
+    margin-bottom: 176px !important;
+  }
+
+  /* O painel de detalhe do ônibus também acompanha a folha, senão cobriria
+     o mapa inteiro no topo. */
+  .detail-panel {
+    top: auto !important;
+    bottom: calc(70dvh - 168px + 12px) !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-height: 46dvh !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none !important; }
 }
 
 /* Não existe tile escuro oficial do OpenStreetMap, e o CARTO (que tinha um)
