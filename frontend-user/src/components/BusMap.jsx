@@ -8,6 +8,7 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import { distanceToPathKm, haversineKm, nearestStop } from "../lib/geo";
 
 const CENTER = [-22.8535, -45.386];
 
@@ -91,6 +92,37 @@ function MapController({ selectedBus, fitBounds }) {
   return null;
 }
 
+/**
+ * A partir de que distância do traçado consideramos o ônibus fora da rota.
+ *
+ * Abaixo disso a diferença é ruído de GPS (precisão típica de 10 a 20 m) ou a
+ * largura da própria via, não desvio de verdade — marcar como desvio nesse caso
+ * encheria o mapa de linhas tracejadas com o ônibus andando normalmente.
+ */
+const OFF_ROUTE_KM = 0.06; // 60 m
+
+/**
+ * Liga o ônibus fora do traçado à próxima parada.
+ *
+ * Devolve null quando o ônibus está na rota — aí não há nada a desenhar e o
+ * traçado original aparece sozinho, como sempre.
+ */
+function computeDetour(bus, route) {
+  if (!bus?.lat || !route?.path?.length || !route.stops?.length) return null;
+
+  const from = [bus.lat, bus.lng];
+  if (distanceToPathKm(from, route.path) <= OFF_ROUTE_KM) return null;
+
+  const stop = nearestStop(from, route.stops);
+  if (!stop) return null;
+
+  return {
+    positions: [from, [stop.lat, stop.lng]],
+    stop,
+    distanceKm: haversineKm(from, [stop.lat, stop.lng]),
+  };
+}
+
 export default function BusMap({ routes, buses, selectedRoute, selectedBus, theme }) {
   const activeRoutes = selectedRoute
     ? routes.filter((r) => r.id === selectedRoute)
@@ -101,6 +133,7 @@ export default function BusMap({ routes, buses, selectedRoute, selectedBus, them
   );
 
   const routeColorById = Object.fromEntries(routes.map((r) => [r.id, r.color]));
+  const routeById = Object.fromEntries(routes.map((r) => [r.id, r]));
 
   const fitBounds =
     selectedRoute && activeRoutes[0]?.path?.length
@@ -198,6 +231,33 @@ export default function BusMap({ routes, buses, selectedRoute, selectedBus, them
           ))}
         </React.Fragment>
       ))}
+
+      {/* Desvios: ônibus fora do traçado ligado à próxima parada.
+          Vem antes dos marcadores para a linha passar por baixo deles, e o
+          traçado original continua desenhado como sempre — este trecho é um
+          acréscimo, não uma substituição. */}
+      {activeBuses.map((bus) => {
+        const detour = computeDetour(bus, routeById[bus.routeId]);
+        if (!detour) return null;
+
+        const color = routeColorById[bus.routeId] || "#2563eb";
+        return (
+          <Polyline
+            key={`detour-${bus.id}`}
+            positions={detour.positions}
+            pathOptions={{
+              color,
+              weight: 4,
+              // Translúcido e tracejado: sinaliza trecho provisório, e deixa o
+              // traçado oficial visível por baixo quando os dois se cruzam.
+              opacity: 0.45,
+              dashArray: "8 10",
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        );
+      })}
 
       {activeBuses.map((bus) => {
         const color = routeColorById[bus.routeId] || "#2563eb";
