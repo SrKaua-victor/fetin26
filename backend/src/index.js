@@ -833,14 +833,24 @@ function registerStopArrivals(bus, points) {
   const route = bus?.routeId ? state.routes.get(bus.routeId) : null;
   if (!route?.stops?.length || !bus.tripId) return [];
 
+  // O que já foi registrado, para nem tentar de novo. Sem isto o laço faria uma
+  // escrita por posição e por parada: um lote acumulado offline (até 1000
+  // posições) numa linha de 12 paradas dispararia 12 mil INSERTs, todos
+  // descartados pela chave composta. A lista em memória basta — a chave continua
+  // garantindo a unicidade se ela estiver desatualizada.
+  const already = new Set((bus.reachedStops || getTripStops(bus.tripId)).map((s) => s.stopId));
+
   const reached = [];
   for (const point of points) {
     for (const stop of route.stops) {
+      if (already.has(stop.id)) continue;
+
       const meters = distanceMeters(point, { lat: stop.lat, lng: stop.lng });
       if (meters > STOP_REACHED_METERS) continue;
 
       const at = point.recordedAt || new Date().toISOString();
       if (markStopReached(bus.tripId, stop, at)) {
+        already.add(stop.id);
         reached.push({ stopId: stop.id, stopName: stop.name, reachedAt: at });
         console.log(`[parada] ${bus.plate || bus.driverName} chegou em "${stop.name}"`);
       }

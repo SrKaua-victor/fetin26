@@ -139,6 +139,12 @@ export default function LiveMapPage({ buses, routes, theme = "light" }) {
                     {bus.plate ? ` · ${bus.plate}` : ""}
                   </div>
 
+                  {bus.status?.reason && (
+                    <div style={S.busAlert}>
+                      ⚠ {STATUS_LABELS[bus.status.reason] || "Ocorrência"}
+                    </div>
+                  )}
+
                   {total > 0 && (
                     <div style={S.progress}>
                       <div style={S.progressTop}>
@@ -270,6 +276,15 @@ const S = {
   legendList: { display: "flex", flexDirection: "column", gap: 8, maxHeight: 240, overflowY: "auto" },
   legendItem: { display: "flex", alignItems: "center", gap: 8 },
 
+  busAlert: {
+    marginTop: 9,
+    padding: "6px 9px",
+    borderRadius: 8,
+    background: "var(--warn-soft)",
+    color: "var(--warn)",
+    fontSize: 11.5,
+    fontWeight: 700,
+  },
   progress: {
     marginTop: 10,
     paddingTop: 10,
@@ -293,6 +308,15 @@ const S = {
   },
   progressFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
   progressLast: { fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 },
+};
+
+/** Ocorrências informadas pelo motorista. Códigos validados no servidor. */
+const STATUS_LABELS = {
+  traffic: "Trânsito intenso",
+  accident: "Acidente no trajeto",
+  breakdown: "Problema mecânico",
+  boarding: "Embarque demorado",
+  other: "Ocorrência no trajeto",
 };
 
 /** Horário curto da chegada, no fuso de quem está olhando. */

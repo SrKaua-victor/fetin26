@@ -23,6 +23,11 @@ export function useAdminSocket() {
       );
     });
 
+    // Ocorrência informada pelo motorista (trânsito, pane…), ou null ao normalizar
+    socket.on("bus:status", ({ busId, status }) => {
+      setBuses((prev) => prev.map((b) => (b.id === busId ? { ...b, status } : b)));
+    });
+
     // Chegada em parada, avisada uma vez por parada. Acumula na lista do ônibus
     // em vez de recarregar tudo — só muda o que precisa mudar.
     socket.on("bus:stop-reached", ({ busId, stopId, stopName, reachedAt }) => {
