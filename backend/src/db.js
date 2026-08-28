@@ -80,9 +80,24 @@ db.exec(`
     FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
   );
 
+  /* Paradas por onde a viagem realmente passou.
+     A chave composta torna o registro idempotente: o ônibus fica alguns minutos
+     dentro do raio da parada, mandando posição a cada segundo, e só a primeira
+     chegada é gravada. Guarda o nome junto porque a rota pode ser renomeada
+     depois, e o histórico deve refletir o que valia na hora. */
+  CREATE TABLE IF NOT EXISTS trip_stops (
+    trip_id    TEXT NOT NULL,
+    stop_id    TEXT NOT NULL,
+    stop_name  TEXT,
+    reached_at TEXT NOT NULL,
+    PRIMARY KEY (trip_id, stop_id),
+    FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_locations_trip    ON locations(trip_id, id);
   CREATE INDEX IF NOT EXISTS idx_trips_started     ON trips(started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_trips_open        ON trips(ended_at);
+  CREATE INDEX IF NOT EXISTS idx_trip_stops_trip   ON trip_stops(trip_id, reached_at);
 `);
 
 function mapRoute(row) {
@@ -389,6 +404,34 @@ export function insertLocationBatch(tripId, points) {
 
 export function bumpTripCounters(tripId, { points = 0, distanceM = 0 }) {
   bumpTripStmt.run(points, distanceM, tripId);
+}
+
+// ─── Paradas alcançadas ───────────────────────────────────────────────────────
+const markStopStmt = db.prepare(
+  `INSERT OR IGNORE INTO trip_stops (trip_id, stop_id, stop_name, reached_at)
+   VALUES (?, ?, ?, ?)`
+);
+
+/**
+ * Registra que a viagem passou por uma parada.
+ *
+ * Devolve true só na primeira vez. O ônibus permanece minutos dentro do raio da
+ * parada mandando posição a cada segundo, então quem chama usa esse retorno para
+ * avisar os clientes uma vez, em vez de a cada leitura de GPS.
+ */
+export function markStopReached(tripId, stop, reachedAt = new Date().toISOString()) {
+  const result = markStopStmt.run(tripId, stop.id, stop.name ?? null, reachedAt);
+  return result.changes > 0;
+}
+
+/** Paradas já alcançadas na viagem, na ordem em que foram atingidas. */
+export function getTripStops(tripId) {
+  return db
+    .prepare(
+      "SELECT stop_id, stop_name, reached_at FROM trip_stops WHERE trip_id = ? ORDER BY reached_at"
+    )
+    .all(tripId)
+    .map((r) => ({ stopId: r.stop_id, stopName: r.stop_name, reachedAt: r.reached_at }));
 }
 
 export function getTripLocations(tripId, { limit = 5000 } = {}) {

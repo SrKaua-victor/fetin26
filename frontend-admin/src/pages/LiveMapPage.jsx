@@ -105,7 +105,15 @@ export default function LiveMapPage({ buses, routes, theme = "light" }) {
         ))}
 
         {activeBuses.map((bus) => {
-          const color = routes.find((r) => r.id === bus.routeId)?.color || "#2563eb";
+          const route = routes.find((r) => r.id === bus.routeId);
+          const color = route?.color || "#2563eb";
+
+          // Paradas efetivamente alcançadas nesta viagem, registradas pelo
+          // servidor — não uma estimativa pela posição atual.
+          const reached = bus.reachedStops || [];
+          const total = route?.stops?.length || 0;
+          const last = reached[reached.length - 1];
+
           return (
             <Marker
               key={bus.id}
@@ -114,7 +122,7 @@ export default function LiveMapPage({ buses, routes, theme = "light" }) {
               zIndexOffset={1000}
             >
               <Popup>
-                <div style={{ fontFamily: "Inter, sans-serif" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", minWidth: 170 }}>
                   <div
                     style={{
                       fontFamily: "Plus Jakarta Sans, sans-serif",
@@ -128,7 +136,33 @@ export default function LiveMapPage({ buses, routes, theme = "light" }) {
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
                     {bus.speed ? `${Math.round(bus.speed)} km/h` : "Parado"}
+                    {bus.plate ? ` · ${bus.plate}` : ""}
                   </div>
+
+                  {total > 0 && (
+                    <div style={S.progress}>
+                      <div style={S.progressTop}>
+                        <span style={S.progressCount}>
+                          {reached.length} de {total}
+                        </span>
+                        <span style={S.progressLabel}>paradas</span>
+                      </div>
+                      <div style={S.progressTrack}>
+                        <div
+                          style={{
+                            ...S.progressFill,
+                            width: `${(reached.length / total) * 100}%`,
+                            background: color,
+                          }}
+                        />
+                      </div>
+                      <div style={S.progressLast}>
+                        {last
+                          ? `Última: ${last.stopName} às ${formatTime(last.reachedAt)}`
+                          : "Ainda não passou por nenhuma parada"}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Popup>
             </Marker>
@@ -235,4 +269,37 @@ const S = {
   },
   legendList: { display: "flex", flexDirection: "column", gap: 8, maxHeight: 240, overflowY: "auto" },
   legendItem: { display: "flex", alignItems: "center", gap: 8 },
+
+  progress: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTop: "1px solid var(--border)",
+  },
+  progressTop: { display: "flex", alignItems: "baseline", gap: 5 },
+  progressCount: {
+    fontFamily: "var(--font-display)",
+    fontWeight: 800,
+    fontSize: 14,
+    color: "var(--text)",
+    letterSpacing: "-0.02em",
+  },
+  progressLabel: { fontSize: 11, color: "var(--text-muted)" },
+  progressTrack: {
+    height: 5,
+    borderRadius: 999,
+    background: "var(--surface-soft)",
+    overflow: "hidden",
+    margin: "7px 0 6px",
+  },
+  progressFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
+  progressLast: { fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 },
 };
+
+/** Horário curto da chegada, no fuso de quem está olhando. */
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}

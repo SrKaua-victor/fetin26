@@ -1,5 +1,14 @@
 import React, { useMemo } from "react";
-import { Bus, Clock, Close, Gauge, MapPin, Users } from "./Icons";
+import { Bus, Check, Clock, Close, Gauge, MapPin, Users } from "./Icons";
+
+/** Horário curto da chegada, no fuso do aparelho de quem está olhando. */
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
 
 const styles = {
   panel: {
@@ -258,6 +267,13 @@ export default function BusDetail({ bus, route, onClose }) {
     [bus.lat, bus.lng, bus.speed, route]
   );
 
+  // Chegadas registradas pelo servidor nesta viagem, indexadas para consulta
+  // direta na timeline.
+  const reachedById = useMemo(
+    () => new Map((bus.reachedStops || []).map((s) => [s.stopId, s])),
+    [bus.reachedStops]
+  );
+
   const isStopped = !bus.speed || bus.speed < 1;
   const occupancyEstimate = (() => {
     if (isStopped) return { label: "Embarcando", chip: "chip-warn" };
@@ -365,15 +381,30 @@ export default function BusDetail({ bus, route, onClose }) {
         <div style={styles.timeline}>
           <div style={styles.timelineLine} />
           {route.stops.map((s, idx) => {
-            const state =
-              idx < passedIdx ? "passed" : idx === passedIdx + 1 || nextStop?.id === s.id ? "next" : "upcoming";
+            const reached = reachedById.get(s.id);
+            // "Passou" agora vem do registro de chegada feito pelo servidor. A
+            // dedução pela posição atual continua valendo só para as paradas sem
+            // registro — viagens antigas, ou trechos em que o ônibus ainda não
+            // chegou perto o bastante de nenhuma parada.
+            const state = reached
+              ? "passed"
+              : idx < passedIdx
+                ? "passed"
+                : idx === passedIdx + 1 || nextStop?.id === s.id
+                  ? "next"
+                  : "upcoming";
             return (
               <div key={s.id} style={styles.stop(state)}>
                 <div style={styles.stopDot(state, color)} />
                 <div style={styles.stopName(state)}>{s.name}</div>
                 <div style={styles.stopMeta}>
                   <span>Parada #{s.order + 1}</span>
-                  {state === "next" && (
+                  {reached && (
+                    <span className="chip chip-online" style={{ fontSize: 10 }}>
+                      <Check size={10} /> {formatTime(reached.reachedAt)}
+                    </span>
+                  )}
+                  {!reached && state === "next" && (
                     <span className="chip chip-info" style={{ fontSize: 10 }}>
                       <Clock size={10} /> Próxima
                     </span>

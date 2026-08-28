@@ -32,6 +32,20 @@ export function useSocket() {
       );
     });
 
+    // O servidor avisa uma vez por parada alcançada. Acumulamos aqui em vez de
+    // recarregar a lista de ônibus: só muda o que precisa mudar, e a timeline
+    // atualiza no instante da chegada.
+    socket.on("bus:stop-reached", ({ busId, stopId, stopName, reachedAt }) => {
+      setBuses((prev) =>
+        prev.map((b) => {
+          if (b.id !== busId) return b;
+          const already = b.reachedStops || [];
+          if (already.some((s) => s.stopId === stopId)) return b;
+          return { ...b, reachedStops: [...already, { stopId, stopName, reachedAt }] };
+        })
+      );
+    });
+
     return () => socket.disconnect();
   }, []);
 
