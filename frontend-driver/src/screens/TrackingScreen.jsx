@@ -9,8 +9,10 @@ import {
   Gauge,
   Loader,
   MapPin,
+  Moon,
   Route,
   Stop,
+  Sun,
   Target,
   Wifi,
   WifiOff,
@@ -43,6 +45,8 @@ export default function TrackingScreen({
   screenAwake,
   backgroundTracking,
   status,
+  theme,
+  onToggleTheme,
   onReportStatus,
   onStop,
 }) {
@@ -71,10 +75,20 @@ export default function TrackingScreen({
             <div style={S.kicker}>Em viagem</div>
             <div style={S.plate}>{trip.plate || "Sem placa"}</div>
           </div>
-          <span className={`chip ${connected ? "chip-hero-live" : "chip-hero-off"}`}>
-            {connected ? <span className="dot" /> : <WifiOff size={13} />}
-            {connected ? "Ao vivo" : "Offline"}
-          </span>
+          <div style={S.heroActions}>
+            <span className={`chip ${connected ? "chip-hero-live" : "chip-hero-off"}`}>
+              {connected ? <span className="dot" /> : <WifiOff size={13} />}
+              {connected ? "Ao vivo" : "Offline"}
+            </span>
+            <button
+              style={S.iconBtn}
+              onClick={onToggleTheme}
+              aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
+              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            >
+              {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+          </div>
         </div>
 
         <div style={S.heroMeta}>
@@ -231,6 +245,18 @@ function Tile({ icon, label, value, small }) {
 }
 
 const S = {
+  heroActions: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    background: "var(--on-hero-dim)",
+    color: "var(--on-hero)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   heroTop: {
     display: "flex",
     alignItems: "flex-start",

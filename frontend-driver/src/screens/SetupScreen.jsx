@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getVehicles } from "../lib/api";
 import PickerField from "../components/PickerField";
-import { Alert, Bus, Loader, LogOut, Play, Route, WifiOff } from "../components/Icons";
+import { Alert, Bus, Loader, LogOut, Moon, Play, Route, Sun, WifiOff } from "../components/Icons";
 
-export default function SetupScreen({ driver, routes, connected, onStart, onSignOut }) {
+export default function SetupScreen({ driver, routes, connected, theme, onToggleTheme, onStart, onSignOut }) {
   const [vehicles, setVehicles] = useState([]);
   const [vehicleId, setVehicleId] = useState("");
   const [routeId, setRouteId] = useState("");
@@ -91,6 +91,14 @@ export default function SetupScreen({ driver, routes, connected, onStart, onSign
             <div style={S.name}>{driver?.name}</div>
             <div style={S.registration}>Matrícula {driver?.registration}</div>
           </div>
+          <button
+            style={S.iconBtn}
+            onClick={onToggleTheme}
+            aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
+            title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+          >
+            {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
+          </button>
           <button style={S.iconBtn} onClick={onSignOut} aria-label="Sair" title="Sair">
             <LogOut size={19} />
           </button>
