@@ -37,6 +37,7 @@ import {
   closeOrphanTrips,
   markStopReached,
   getTripStops,
+  setTripStatus,
 } from "./db.js";
 import {
   verifyPassword,
@@ -130,6 +131,15 @@ const SAVE_HEARTBEAT_MS = 30000;
 // do GPS (10 a 20 m) para não perder chegadas, e abaixo do espaçamento entre
 // paradas para não marcar a vizinha junto.
 const STOP_REACHED_METERS = 50;
+
+/**
+ * Ocorrências que o motorista pode informar.
+ *
+ * Códigos fixos, não texto livre: o rótulo é escolhido por quem exibe, então dá
+ * para traduzir ou reescrever sem migrar o banco, e o motorista dirigindo toca
+ * um botão em vez de digitar.
+ */
+const TRIP_STATUS_REASONS = ["traffic", "accident", "breakdown", "boarding", "other"];
 
 // ─── Dados iniciais de exemplo ────────────────────────────────────────────────
 const exampleRoute = {
@@ -364,6 +374,7 @@ app.post("/api/driver/locations", requireDriver, (req, res) => {
       online: true,
       startedAt: trip.startedAt,
       reachedStops: getTripStops(trip.id),
+      status: trip.status,
     };
     state.buses.set(bus.id, bus);
     io.emit("buses:updated", [...state.buses.values()]);
@@ -669,6 +680,7 @@ io.on("connection", (socket) => {
       online: true,
       startedAt: trip.startedAt,
       reachedStops: getTripStops(trip.id),
+      status: trip.status,
     };
     state.buses.set(bus.id, bus);
     state.drivers.set(socket.id, { busId: bus.id, tripId: trip.id });
@@ -755,6 +767,42 @@ io.on("connection", (socket) => {
     reply({ ok: true, saved: valid.length });
     console.log(
       `[driver] buffer de ${valid.length} posições recebido (${saved} gravadas) na viagem ${driverInfo.tripId}`
+    );
+  });
+
+  // Motorista informa (ou desfaz) uma ocorrência: trânsito, pane, embarque longo.
+  // Chega ao passageiro na hora, junto com o horário em que começou.
+  socket.on("driver:status", (...args) => {
+    const reply = ackOf(args);
+    const payload = typeof args[0] === "object" && args[0] !== null ? args[0] : {};
+    const reason = payload.reason ?? null;
+
+    if (reason !== null && !TRIP_STATUS_REASONS.includes(reason)) {
+      reply({ ok: false, error: "Ocorrência desconhecida" });
+      return;
+    }
+
+    const driverInfo = state.drivers.get(socket.id);
+    if (!driverInfo?.tripId) {
+      reply({ ok: false, error: "Nenhuma viagem em andamento" });
+      return;
+    }
+
+    const trip = setTripStatus(driverInfo.tripId, reason);
+    if (!trip) {
+      reply({ ok: false, error: "Viagem não encontrada" });
+      return;
+    }
+
+    const bus = state.buses.get(driverInfo.busId);
+    if (bus) {
+      state.buses.set(bus.id, { ...bus, status: trip.status });
+      io.emit("bus:status", { busId: bus.id, tripId: trip.id, status: trip.status });
+    }
+
+    reply({ ok: true, status: trip.status });
+    console.log(
+      `[ocorrência] ${bus?.plate || "viagem " + trip.id.slice(0, 8)}: ${reason || "normalizado"}`
     );
   });
 

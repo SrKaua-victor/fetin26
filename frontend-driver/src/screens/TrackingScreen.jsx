@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import SpeedGauge from "../components/SpeedGauge";
+import StatusBar from "../components/StatusBar";
 import { formatDistance } from "../lib/geo";
 import {
   Alert,
@@ -41,6 +42,8 @@ export default function TrackingScreen({
   distance,
   screenAwake,
   backgroundTracking,
+  status,
+  onReportStatus,
   onStop,
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -146,6 +149,8 @@ export default function TrackingScreen({
             </div>
           </div>
         </div>
+
+        <StatusBar status={status} onReport={onReportStatus} />
 
         {/* Indicadores */}
         <div className="tiles">

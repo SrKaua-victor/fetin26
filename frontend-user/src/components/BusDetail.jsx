@@ -1,5 +1,26 @@
 import React, { useMemo } from "react";
-import { Bus, Check, Clock, Close, Gauge, MapPin, Users } from "./Icons";
+import { Alert, Bus, Check, Clock, Close, Gauge, MapPin, Users } from "./Icons";
+
+/**
+ * Rótulos das ocorrências que o motorista pode informar. Os códigos são os
+ * mesmos validados no servidor; o texto é escolhido aqui, então dá para
+ * reescrever sem mexer no banco.
+ */
+const STATUS_LABELS = {
+  traffic: "Trânsito intenso na via",
+  accident: "Acidente no trajeto",
+  breakdown: "Problema mecânico",
+  boarding: "Embarque demorado",
+  other: "Ocorrência no trajeto",
+};
+
+/** "há 12 min" a partir do horário em que a ocorrência começou. */
+function sinceText(iso) {
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(min) || min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  return `há ${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
+}
 
 /** Horário curto da chegada, no fuso do aparelho de quem está olhando. */
 function formatTime(iso) {
@@ -75,6 +96,18 @@ const styles = {
     transition: "all 0.2s ease",
   },
 
+  alert: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    margin: "0 18px",
+    padding: "11px 13px",
+    borderRadius: 12,
+    background: "var(--warn-soft)",
+    color: "var(--warn)",
+  },
+  alertTitle: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 13.5, letterSpacing: "-0.01em" },
+  alertSub: { fontSize: 11.5, marginTop: 1, opacity: 0.85 },
   etaBlock: {
     padding: "18px 18px 16px",
     borderBottom: "1px solid var(--border)",
@@ -315,6 +348,21 @@ export default function BusDetail({ bus, route, onClose }) {
           <Close size={16} />
         </button>
       </div>
+
+      {/* Aviso do motorista. Vem antes do tempo estimado de propósito: se há uma
+          ocorrência, a estimativa abaixo não vale muito e o passageiro precisa
+          saber disso primeiro. */}
+      {bus.status?.reason && (
+        <div style={styles.alert}>
+          <Alert size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={styles.alertTitle}>{STATUS_LABELS[bus.status.reason] || "Ocorrência"}</div>
+            <div style={styles.alertSub}>
+              Informado pelo motorista{bus.status.since ? ` ${sinceText(bus.status.since)}` : ""}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={styles.etaBlock}>
         <div style={styles.etaLabel}>Tempo até a próxima parada</div>

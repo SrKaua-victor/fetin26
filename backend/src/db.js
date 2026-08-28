@@ -100,6 +100,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_trip_stops_trip   ON trip_stops(trip_id, reached_at);
 `);
 
+/**
+ * Acrescenta uma coluna a uma tabela que já existe.
+ *
+ * O `CREATE TABLE IF NOT EXISTS` acima só cria do zero: em banco já criado ele
+ * não faz nada, e colunas novas precisam ser adicionadas à parte. Consultar o
+ * schema antes torna a chamada repetível — roda a cada inicialização sem erro.
+ */
+function addColumnIfMissing(table, column, definition) {
+  const exists = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .some((c) => c.name === column);
+  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+// Ocorrência informada pelo motorista (trânsito, pane...) e desde quando vale.
+addColumnIfMissing("trips", "status_reason", "TEXT");
+addColumnIfMissing("trips", "status_since", "TEXT");
+
 function mapRoute(row) {
   if (!row) return null;
   return { id: row.id, name: row.name, color: row.color,
@@ -175,6 +194,10 @@ function mapTrip(row) {
     endedAt: row.ended_at,
     points: row.points,
     distanceM: row.distance_m,
+    // null quando a viagem está correndo normalmente
+    status: row.status_reason
+      ? { reason: row.status_reason, since: row.status_since }
+      : null,
   };
 }
 
@@ -404,6 +427,25 @@ export function insertLocationBatch(tripId, points) {
 
 export function bumpTripCounters(tripId, { points = 0, distanceM = 0 }) {
   bumpTripStmt.run(points, distanceM, tripId);
+}
+
+/**
+ * Grava a ocorrência informada pelo motorista. `reason` nulo volta ao normal.
+ *
+ * O horário só é renovado quando a ocorrência muda: reenviar o mesmo motivo não
+ * reinicia a contagem de "há quanto tempo", que é o que o passageiro lê.
+ */
+export function setTripStatus(tripId, reason) {
+  const current = getTrip(tripId);
+  if (!current) return null;
+  if ((current.status?.reason ?? null) === (reason ?? null)) return current;
+
+  db.prepare("UPDATE trips SET status_reason = ?, status_since = ? WHERE id = ?").run(
+    reason ?? null,
+    reason ? new Date().toISOString() : null,
+    tripId
+  );
+  return getTrip(tripId);
 }
 
 // ─── Paradas alcançadas ───────────────────────────────────────────────────────

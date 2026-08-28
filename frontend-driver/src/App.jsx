@@ -25,6 +25,8 @@ export default function App() {
     startTrip,
     sendLocation,
     stopTrip,
+    status,
+    reportStatus,
   } = useDriverSocket({ token, serverUrl });
 
   // O GPS só roda com viagem ativa; cada leitura vai direto para a central.
@@ -99,6 +101,8 @@ export default function App() {
       distance={distance}
       screenAwake={screenAwake}
       backgroundTracking={isNative}
+      status={status}
+      onReportStatus={reportStatus}
       onStop={stopTrip}
     />
   );
