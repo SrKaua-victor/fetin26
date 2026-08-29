@@ -35,6 +35,9 @@ import {
   bumpTripCounters,
   getTripLocations,
   closeOrphanTrips,
+  markStopReached,
+  getTripStops,
+  setTripStatus,
 } from "./db.js";
 import {
   verifyPassword,
@@ -123,6 +126,20 @@ const ORPHAN_BUS_TIMEOUT_MS = 3 * 60 * 1000;
 const SAVE_MIN_INTERVAL_MS = 2000;
 const SAVE_MIN_METERS = 15;
 const SAVE_HEARTBEAT_MS = 30000;
+
+// Raio para considerar que o ônibus chegou na parada. Acima da precisão típica
+// do GPS (10 a 20 m) para não perder chegadas, e abaixo do espaçamento entre
+// paradas para não marcar a vizinha junto.
+const STOP_REACHED_METERS = 50;
+
+/**
+ * Ocorrências que o motorista pode informar.
+ *
+ * Códigos fixos, não texto livre: o rótulo é escolhido por quem exibe, então dá
+ * para traduzir ou reescrever sem migrar o banco, e o motorista dirigindo toca
+ * um botão em vez de digitar.
+ */
+const TRIP_STATUS_REASONS = ["traffic", "accident", "breakdown", "boarding", "other"];
 
 // ─── Dados iniciais de exemplo ────────────────────────────────────────────────
 const exampleRoute = {
@@ -356,6 +373,8 @@ app.post("/api/driver/locations", requireDriver, (req, res) => {
       lastUpdate: new Date().toISOString(),
       online: true,
       startedAt: trip.startedAt,
+      reachedStops: getTripStops(trip.id),
+      status: trip.status,
     };
     state.buses.set(bus.id, bus);
     io.emit("buses:updated", [...state.buses.values()]);
@@ -384,6 +403,11 @@ app.post("/api/driver/locations", requireDriver, (req, res) => {
     heading: updated.heading,
     lastUpdate: updated.lastUpdate,
   });
+
+  // Checa contra o lote inteiro, não só a última posição: em segundo plano o app
+  // acumula e envia de dez em dez segundos, então uma parada pode estar no meio
+  // do lote e nunca ser a posição mais recente.
+  handleStopArrivals(updated, valid);
 
   // Chegou posição por HTTP: o motorista está em viagem, então não encerra por inatividade
   const pendingClose = pendingTripCloses.get(tripId);
@@ -655,6 +679,8 @@ io.on("connection", (socket) => {
       lastUpdate: null,
       online: true,
       startedAt: trip.startedAt,
+      reachedStops: getTripStops(trip.id),
+      status: trip.status,
     };
     state.buses.set(bus.id, bus);
     state.drivers.set(socket.id, { busId: bus.id, tripId: trip.id });
@@ -701,9 +727,16 @@ io.on("connection", (socket) => {
       lastUpdate: updated.lastUpdate,
     });
 
-    persistPoints(driverInfo.tripId, [
-      { lat, lng, speed, heading, accuracy, recordedAt: recordedAt || updated.lastUpdate },
-    ]);
+    const point = {
+      lat,
+      lng,
+      speed,
+      heading,
+      accuracy,
+      recordedAt: recordedAt || updated.lastUpdate,
+    };
+    persistPoints(driverInfo.tripId, [point]);
+    handleStopArrivals(updated, [point]);
   });
 
   // Buffer descarregado pelo app depois de ficar sem internet
@@ -726,9 +759,50 @@ io.on("connection", (socket) => {
 
     const saved = persistPoints(driverInfo.tripId, valid);
 
+    // O buffer vem de um período sem rede: as paradas atingidas nesse intervalo
+    // só são descobertas agora.
+    const bus = state.buses.get(driverInfo.busId);
+    if (bus) handleStopArrivals(bus, valid);
+
     reply({ ok: true, saved: valid.length });
     console.log(
       `[driver] buffer de ${valid.length} posições recebido (${saved} gravadas) na viagem ${driverInfo.tripId}`
+    );
+  });
+
+  // Motorista informa (ou desfaz) uma ocorrência: trânsito, pane, embarque longo.
+  // Chega ao passageiro na hora, junto com o horário em que começou.
+  socket.on("driver:status", (...args) => {
+    const reply = ackOf(args);
+    const payload = typeof args[0] === "object" && args[0] !== null ? args[0] : {};
+    const reason = payload.reason ?? null;
+
+    if (reason !== null && !TRIP_STATUS_REASONS.includes(reason)) {
+      reply({ ok: false, error: "Ocorrência desconhecida" });
+      return;
+    }
+
+    const driverInfo = state.drivers.get(socket.id);
+    if (!driverInfo?.tripId) {
+      reply({ ok: false, error: "Nenhuma viagem em andamento" });
+      return;
+    }
+
+    const trip = setTripStatus(driverInfo.tripId, reason);
+    if (!trip) {
+      reply({ ok: false, error: "Viagem não encontrada" });
+      return;
+    }
+
+    const bus = state.buses.get(driverInfo.busId);
+    if (bus) {
+      state.buses.set(bus.id, { ...bus, status: trip.status });
+      io.emit("bus:status", { busId: bus.id, tripId: trip.id, status: trip.status });
+    }
+
+    reply({ ok: true, status: trip.status });
+    console.log(
+      `[ocorrência] ${bus?.plate || "viagem " + trip.id.slice(0, 8)}: ${reason || "normalizado"}`
     );
   });
 
@@ -743,6 +817,68 @@ io.on("connection", (socket) => {
     console.log(`[socket] desconectado: ${socket.id}`);
   });
 });
+
+/**
+ * Marca as paradas por onde o ônibus passou.
+ *
+ * Roda para toda posição recebida, de propósito — fora do throttle de gravação.
+ * O throttle descarta posições próximas entre si, e é justamente parado na
+ * parada que o ônibus gera posições assim: filtrar antes de checar faria perder
+ * chegadas curtas.
+ *
+ * Devolve as paradas registradas agora (só as inéditas), para quem chama avisar
+ * os clientes uma única vez.
+ */
+function registerStopArrivals(bus, points) {
+  const route = bus?.routeId ? state.routes.get(bus.routeId) : null;
+  if (!route?.stops?.length || !bus.tripId) return [];
+
+  // O que já foi registrado, para nem tentar de novo. Sem isto o laço faria uma
+  // escrita por posição e por parada: um lote acumulado offline (até 1000
+  // posições) numa linha de 12 paradas dispararia 12 mil INSERTs, todos
+  // descartados pela chave composta. A lista em memória basta — a chave continua
+  // garantindo a unicidade se ela estiver desatualizada.
+  const already = new Set((bus.reachedStops || getTripStops(bus.tripId)).map((s) => s.stopId));
+
+  const reached = [];
+  for (const point of points) {
+    for (const stop of route.stops) {
+      if (already.has(stop.id)) continue;
+
+      const meters = distanceMeters(point, { lat: stop.lat, lng: stop.lng });
+      if (meters > STOP_REACHED_METERS) continue;
+
+      const at = point.recordedAt || new Date().toISOString();
+      if (markStopReached(bus.tripId, stop, at)) {
+        already.add(stop.id);
+        reached.push({ stopId: stop.id, stopName: stop.name, reachedAt: at });
+        console.log(`[parada] ${bus.plate || bus.driverName} chegou em "${stop.name}"`);
+      }
+    }
+  }
+  return reached;
+}
+
+/**
+ * Roda a detecção e, havendo novidade, avisa os clientes e atualiza o ônibus em
+ * memória para quem entrar depois já receber a lista completa.
+ */
+function handleStopArrivals(bus, points) {
+  const reached = registerStopArrivals(bus, points);
+  if (reached.length === 0) return;
+
+  const current = state.buses.get(bus.id);
+  if (current) {
+    state.buses.set(bus.id, {
+      ...current,
+      reachedStops: getTripStops(bus.tripId),
+    });
+  }
+
+  for (const stop of reached) {
+    io.emit("bus:stop-reached", { busId: bus.id, tripId: bus.tripId, ...stop });
+  }
+}
 
 /**
  * Grava posições no banco respeitando o throttle e acumulando a distância.

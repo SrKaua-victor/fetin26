@@ -7,10 +7,12 @@ import { useDriverSocket } from "./hooks/useDriverSocket";
 import { useGeolocation } from "./hooks/useGeolocation";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { getServerUrl, setServerUrl, isNative } from "./lib/api";
+import { useTheme } from "./hooks/useTheme";
 import { Bus, Loader } from "./components/Icons";
 
 export default function App() {
   const [serverUrl, setServer] = useState(getServerUrl);
+  const { theme, toggle: toggleTheme } = useTheme();
   const { driver, token, checking, signIn, signOut } = useAuth();
   const {
     connected,
@@ -25,6 +27,8 @@ export default function App() {
     startTrip,
     sendLocation,
     stopTrip,
+    status,
+    reportStatus,
   } = useDriverSocket({ token, serverUrl });
 
   // O GPS só roda com viagem ativa; cada leitura vai direto para a central.
@@ -80,6 +84,8 @@ export default function App() {
         driver={driver}
         routes={routes}
         connected={connected}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onStart={handleStart}
         onSignOut={signOut}
       />
@@ -99,6 +105,10 @@ export default function App() {
       distance={distance}
       screenAwake={screenAwake}
       backgroundTracking={isNative}
+      status={status}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      onReportStatus={reportStatus}
       onStop={stopTrip}
     />
   );

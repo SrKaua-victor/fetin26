@@ -16,5 +16,27 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- VLibras: tradutor de Libras do governo federal (vlibras.gov.br).
+         O plugin procura estes elementos pelos atributos vw-*, então a marcação
+         precisa existir antes de ele ser inicializado. -->
+    <div vw class="enabled">
+      <div vw-access-button class="active"></div>
+      <div vw-plugin-wrapper>
+        <div class="vw-plugin-top-wrapper"></div>
+      </div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js" defer></script>
+    <script>
+      // Recurso de terceiro, carregado de fora: se o servidor do governo estiver
+      // fora do ar ou bloqueado na rede do passageiro, o mapa tem que continuar
+      // funcionando. Sem esta checagem o acesso a VLibras lançaria e derrubaria
+      // o restante do script da página.
+      window.addEventListener("load", function () {
+        if (window.VLibras) {
+          new window.VLibras.Widget("https://vlibras.gov.br/app");
+        }
+      });
+    </script>
   </body>
 </html>

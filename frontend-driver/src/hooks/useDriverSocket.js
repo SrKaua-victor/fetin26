@@ -63,6 +63,8 @@ export function useDriverSocket({ token, serverUrl }) {
   const [sent, setSent] = useState(0);
   const [lastSentAt, setLastSentAt] = useState(null);
   const [distance, setDistance] = useState(0);
+  // Ocorrencia em vigor, como o servidor a conhece
+  const [status, setStatus] = useState(null);
 
   tokenRef.current = token;
 
@@ -186,6 +188,8 @@ export function useDriverSocket({ token, serverUrl }) {
       registeredRef.current = true;
       setRegistered(true);
       setSessionError(null);
+      // Ao retomar depois de uma queda, adota a ocorrência que já valia na central
+      setStatus(res.bus?.status || null);
       return res;
     },
     []
@@ -335,6 +339,23 @@ export function useDriverSocket({ token, serverUrl }) {
     [flushBuffer, flushOverHttp, persistBuffer]
   );
 
+  /**
+   * Informa (ou desfaz, com null) uma ocorrência na viagem.
+   *
+   * O estado exibido é o que o servidor confirmou, não o que foi clicado: se o
+   * envio falhar, o motorista continua vendo a situação real em vez de um aviso
+   * que o passageiro nunca recebeu.
+   */
+  const reportStatus = useCallback(async (reason) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) throw new Error("Sem conexão com a central");
+
+    const res = await socket.timeout(ACK_TIMEOUT).emitWithAck("driver:status", { reason });
+    if (!res?.ok) throw new Error(res?.error || "Não foi possível avisar a central");
+    setStatus(res.status || null);
+    return res.status;
+  }, []);
+
   const stopTrip = useCallback(async () => {
     const socket = socketRef.current;
 
@@ -362,6 +383,7 @@ export function useDriverSocket({ token, serverUrl }) {
     registeredRef.current = false;
     setRegistered(false);
     setSessionError(null);
+    setStatus(null);
     persistTrip(null);
   }, [drainBuffer, persistTrip]);
 
@@ -378,5 +400,7 @@ export function useDriverSocket({ token, serverUrl }) {
     startTrip,
     sendLocation,
     stopTrip,
+    status,
+    reportStatus,
   };
 }

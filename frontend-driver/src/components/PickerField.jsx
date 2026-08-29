@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Loader } from "./Icons";
 
 /**
@@ -115,52 +116,58 @@ export default function PickerField({
         <ChevronDown size={20} className="picker-chevron" />
       </button>
 
-      {open && (
-        <>
-          <div className="backdrop" onClick={() => setOpen(false)} />
-          <div className="sheet" role="dialog" aria-modal="true" aria-label={sheetTitle || label}>
-            <div className="sheet-grip" />
-            <div className="picker-sheet-title">{sheetTitle || label}</div>
+      {/* A folha vai para o <body> em vez de ficar nesta árvore. Dentro do
+          .content — que é position:relative com z-index 1 — ela ficava presa
+          naquele contexto de empilhamento, e a .action-bar, com z-index maior,
+          cobria as opções: dava para ver a lista, mas não para tocar nela. */}
+      {open &&
+        createPortal(
+          <>
+            <div className="backdrop" onClick={() => setOpen(false)} />
+            <div className="sheet" role="dialog" aria-modal="true" aria-label={sheetTitle || label}>
+              <div className="sheet-grip" />
+              <div className="picker-sheet-title">{sheetTitle || label}</div>
 
-            <div
-              className="picker-list"
-              role="listbox"
-              ref={listRef}
-              onKeyDown={onListKeyDown}
-              aria-label={sheetTitle || label}
-            >
-              {options.map((option) => {
-                const on = option.value === value;
-                return (
-                  <button
-                    type="button"
-                    key={option.value}
-                    role="option"
-                    aria-selected={on}
-                    className={`picker-option${on ? " picker-option-on" : ""}`}
-                    onClick={() => pick(option.value)}
-                  >
-                    <span className="picker-badge" style={badgeTint(option.color)}>
-                      {icon}
-                    </span>
-                    <span className="picker-body">
-                      <span className={`picker-title${option.mono ? " picker-title-mono" : ""}`}>
-                        {option.title}
+              <div
+                className="picker-list"
+                role="listbox"
+                ref={listRef}
+                onKeyDown={onListKeyDown}
+                aria-label={sheetTitle || label}
+              >
+                {options.map((option) => {
+                  const on = option.value === value;
+                  return (
+                    <button
+                      type="button"
+                      key={option.value}
+                      role="option"
+                      aria-selected={on}
+                      className={`picker-option${on ? " picker-option-on" : ""}`}
+                      onClick={() => pick(option.value)}
+                    >
+                      <span className="picker-badge" style={badgeTint(option.color)}>
+                        {icon}
                       </span>
-                      {option.subtitle && <span className="picker-sub">{option.subtitle}</span>}
-                    </span>
-                    {on && (
-                      <span className="picker-check">
-                        <Check size={15} />
+                      <span className="picker-body">
+                        <span className={`picker-title${option.mono ? " picker-title-mono" : ""}`}>
+                          {option.title}
+                        </span>
+                        {option.subtitle && <span className="picker-sub">{option.subtitle}</span>}
                       </span>
-                    )}
-                  </button>
-                );
-              })}
+                      {on && (
+                        <span className="picker-check">
+                          <Check size={15} />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   );
 }

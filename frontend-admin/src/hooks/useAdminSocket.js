@@ -23,6 +23,24 @@ export function useAdminSocket() {
       );
     });
 
+    // Ocorrência informada pelo motorista (trânsito, pane…), ou null ao normalizar
+    socket.on("bus:status", ({ busId, status }) => {
+      setBuses((prev) => prev.map((b) => (b.id === busId ? { ...b, status } : b)));
+    });
+
+    // Chegada em parada, avisada uma vez por parada. Acumula na lista do ônibus
+    // em vez de recarregar tudo — só muda o que precisa mudar.
+    socket.on("bus:stop-reached", ({ busId, stopId, stopName, reachedAt }) => {
+      setBuses((prev) =>
+        prev.map((b) => {
+          if (b.id !== busId) return b;
+          const already = b.reachedStops || [];
+          if (already.some((s) => s.stopId === stopId)) return b;
+          return { ...b, reachedStops: [...already, { stopId, stopName, reachedAt }] };
+        })
+      );
+    });
+
     return () => socket.disconnect();
   }, []);
 

@@ -5,6 +5,8 @@ export const isNative = Capacitor.isNativePlatform();
 
 const TOKEN_KEY = "bustrack.driver.token";
 const SERVER_KEY = "bustrack.driver.server";
+// Guarda qual era o endereço embutido quando o motorista salvou o dele. Ver getServerUrl.
+const SERVER_BASE_KEY = "bustrack.driver.serverBase";
 
 // O endereço embutido no build (VITE_SERVER_URL) só vale para o APK, que não tem
 // servidor próprio. No navegador o padrão é sempre a mesma origem: em dev o Vite faz
@@ -29,14 +31,41 @@ export function normalizeServerUrl(value) {
   return `${isLocal ? "http" : "https"}://${trimmed}`;
 }
 
+/**
+ * Endereço em uso: o que o motorista digitou em *Servidor*, se houver; senão o
+ * embutido no build.
+ *
+ * O endereço digitado vencia o embutido para sempre, e instalar um APK novo não
+ * limpa o armazenamento do app. Resultado: quem tivesse mexido em *Servidor* uma
+ * vez ficava preso naquele endereço, e uma versão nova apontando para outro
+ * servidor não tinha efeito nenhum — o app seguia procurando um túnel que já
+ * não existia.
+ *
+ * Por isso guardamos junto qual era o endereço embutido na hora em que o
+ * motorista salvou o dele. Se o build passou a apontar para outro lugar, o valor
+ * salvo veio de outra versão e é descartado.
+ */
 export function getServerUrl() {
-  return normalizeServerUrl(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+  const stored = localStorage.getItem(SERVER_KEY);
+  if (stored) {
+    if (localStorage.getItem(SERVER_BASE_KEY) === DEFAULT_SERVER) {
+      return normalizeServerUrl(stored);
+    }
+    localStorage.removeItem(SERVER_KEY);
+    localStorage.removeItem(SERVER_BASE_KEY);
+  }
+  return normalizeServerUrl(DEFAULT_SERVER);
 }
 
 export function setServerUrl(url) {
   const normalized = normalizeServerUrl(url);
-  if (normalized) localStorage.setItem(SERVER_KEY, normalized);
-  else localStorage.removeItem(SERVER_KEY);
+  if (normalized) {
+    localStorage.setItem(SERVER_KEY, normalized);
+    localStorage.setItem(SERVER_BASE_KEY, DEFAULT_SERVER);
+  } else {
+    localStorage.removeItem(SERVER_KEY);
+    localStorage.removeItem(SERVER_BASE_KEY);
+  }
   return normalized;
 }
 

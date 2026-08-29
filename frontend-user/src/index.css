@@ -22,7 +22,8 @@
   --accent-soft: #ffedd5;
   --online: #16a34a;       /* verde */
   --online-soft: #dcfce7;
-  --warn: #f59e0b;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
   --danger: #ef4444;
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -64,10 +65,26 @@
   --accent-soft: rgba(251, 146, 60, 0.18);
   --online: #4ade80;
   --online-soft: rgba(74, 222, 128, 0.18);
+  --warn: #fbbf24;
+  --warn-soft: rgba(245, 158, 11, 0.18);
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
   --shadow: 0 6px 20px -4px rgba(0,0,0,0.5);
   --shadow-lg: 0 24px 60px -12px rgba(0,0,0,0.7);
+}
+
+/* ───────────────── VLibras ───────────────── */
+/* O widget é inserido no fim do body com z-index automático. Como o #root não
+   cria contexto de empilhamento, ele disputa camada com a barra lateral
+   (z-index 1000) e com o painel de detalhe (900) — e perderia dos dois. O botão
+   até aparece, porque fica sobre o mapa, mas o painel de tradução abriria
+   escondido atrás da lista de linhas. */
+[vw],
+.vlibras-access-wrapper {
+  /* O position é necessário: z-index não tem efeito em elemento estático, e o
+     wrapper do botão vem sem posicionamento do próprio plugin. */
+  position: relative;
+  z-index: 2000;
 }
 
 /* ───────────────── Reset ───────────────── */
