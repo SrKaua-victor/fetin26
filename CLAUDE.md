@@ -88,6 +88,12 @@ carimbado, respondendo `200 OK`. Hoje usamos os tiles do OpenStreetMap. Não
 reintroduza filtro `grayscale` no tema claro: ele foi feito para os tiles
 dessaturados do CARTO e, sobre o OSM, apaga a leitura do mapa.
 
+**O `build:apk` sobrescreve o `dist` da web.** Ele roda o `vite build` com
+`VITE_SERVER_URL` preenchido, e esse `dist` é o mesmo que o backend serve em
+`/motorista`. Depois de gerar APK, rode `npm run build` sem a variável para o
+site voltar a ser same-origin, senão a versão web passa a carregar o endereço
+embutido e o `getServerUrl()` descarta o endereço salvo dos motoristas.
+
 **Migração de banco precisa de `ALTER` à parte.** `CREATE TABLE IF NOT EXISTS`
 só cria do zero. Colunas novas em tabela existente usam o helper
 `addColumnIfMissing` em `db.js`.
@@ -135,6 +141,7 @@ npm run build:all
 # APK (funciona no cmd e no Git Bash)
 cd frontend-driver
 VITE_SERVER_URL=https://bustrack.app.br npm run build:apk
+npm run build   # refaz o dist da web sem o endereço embutido
 
 # Publicar o APK
 gh release delete-asset v1.0.0 bustrack-motorista.apk --yes
