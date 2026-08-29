@@ -73,6 +73,20 @@
   --shadow-lg: 0 24px 60px -12px rgba(0,0,0,0.7);
 }
 
+/* ───────────────── VLibras ───────────────── */
+/* O widget é inserido no fim do body com z-index automático. Como o #root não
+   cria contexto de empilhamento, ele disputa camada com a barra lateral
+   (z-index 1000) e com o painel de detalhe (900) — e perderia dos dois. O botão
+   até aparece, porque fica sobre o mapa, mas o painel de tradução abriria
+   escondido atrás da lista de linhas. */
+[vw],
+.vlibras-access-wrapper {
+  /* O position é necessário: z-index não tem efeito em elemento estático, e o
+     wrapper do botão vem sem posicionamento do próprio plugin. */
+  position: relative;
+  z-index: 2000;
+}
+
 /* ───────────────── Reset ───────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
