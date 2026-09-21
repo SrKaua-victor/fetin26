@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { Bus, MapPin, Search, Star, StarFill, Sun, Moon, Wifi, Users } from "./Icons";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Bus, Close, MapPin, Menu, Search, Star, StarFill, Sun, Moon, Wifi, Users } from "./Icons";
 
 const styles = {
   panel: {
@@ -59,7 +59,10 @@ const styles = {
     justifyContent: "center",
     color: "var(--text-soft)",
     background: "var(--hover)",
-    transition: "all 0.2s ease",
+    // Não usar "all": ele inclui visibility, que o botão herda da gaveta. Ao
+    // abrir, a visibilidade herdada entraria em transição e o botão ficaria
+    // hidden no primeiro instante, e o foco no X seria recusado.
+    transition: "background-color 0.2s ease, color 0.2s ease",
   },
 
   statusCard: {
@@ -323,9 +326,39 @@ export default function Sidebar({
 }) {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("all"); // all | favorites
-  // No celular o painel vira uma folha sobre o mapa; começa recolhida para o
-  // mapa ficar visível de cara. No desktop este estado não tem efeito nenhum.
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // No celular o painel vira uma gaveta lateral que abre e fecha por botão;
+  // começa fechada para o mapa ocupar a tela. No desktop o painel é fixo e
+  // este estado não tem efeito nenhum.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const openBtnRef = useRef(null);
+  const closeBtnRef = useRef(null);
+  const wasOpen = useRef(false);
+
+  // Esc fecha; o foco vai para dentro da gaveta ao abrir e volta para o botão
+  // ao fechar, para quem navega por teclado ou leitor de tela não se perder.
+  useEffect(() => {
+    if (menuOpen) {
+      wasOpen.current = true;
+      closeBtnRef.current?.focus();
+      const onKey = (e) => {
+        if (e.key === "Escape") setMenuOpen(false);
+      };
+      document.addEventListener("keydown", onKey);
+      return () => document.removeEventListener("keydown", onKey);
+    }
+    if (wasOpen.current) openBtnRef.current?.focus();
+  }, [menuOpen]);
+
+  // Escolher linha ou ônibus fecha a gaveta: o que a pessoa quer ver em
+  // seguida é o mapa.
+  const pickRoute = (id) => {
+    onSelectRoute(id);
+    setMenuOpen(false);
+  };
+  const pickBus = (id) => {
+    onSelectBus(id);
+    setMenuOpen(false);
+  };
 
   const activeBuses = useMemo(() => buses.filter((b) => b.online && b.lat), [buses]);
 
@@ -343,229 +376,254 @@ export default function Sidebar({
   );
 
   return (
-    <aside className={`panel${sheetOpen ? " panel-open" : ""}`} style={styles.panel}>
-      {/* Só aparece no celular, onde o painel vira folha sobre o mapa (ver index.css) */}
-      <button
-        className="sheet-grab"
-        onClick={() => setSheetOpen((v) => !v)}
-        aria-label={sheetOpen ? "Recolher a lista de linhas" : "Expandir a lista de linhas"}
-        aria-expanded={sheetOpen}
-      >
-        <span className="sheet-grab-bar" />
-      </button>
+    <>
+      {/* Botão, fundo e X só aparecem no celular (ver index.css) */}
+      {!menuOpen && (
+        <button
+          ref={openBtnRef}
+          className="menu-fab"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Abrir a lista de linhas"
+          aria-expanded={false}
+          aria-controls="painel-linhas"
+        >
+          <Menu size={20} />
+          Linhas
+          {activeBuses.length > 0 && <span className="live-dot" />}
+        </button>
+      )}
+      {menuOpen && <div className="panel-backdrop" onClick={() => setMenuOpen(false)} />}
 
-      <div style={styles.header}>
-        <div style={styles.topRow}>
-          <div style={styles.logo}>
-            <div style={styles.logoMark}>
-              <Bus size={18} />
+      <aside
+        id="painel-linhas"
+        className={`panel${menuOpen ? " panel-open" : ""}`}
+        style={styles.panel}
+      >
+        <div style={styles.header}>
+          <div style={styles.topRow}>
+            <div style={styles.logo}>
+              <div style={styles.logoMark}>
+                <Bus size={18} />
+              </div>
+              BusTrack
             </div>
-            BusTrack
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={styles.iconBtn}
+                onClick={onToggleTheme}
+                aria-label="Alternar tema"
+                title="Alternar tema"
+              >
+                {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button
+                ref={closeBtnRef}
+                className="panel-close"
+                style={styles.iconBtn}
+                onClick={() => setMenuOpen(false)}
+                aria-label="Fechar a lista de linhas"
+                title="Fechar"
+              >
+                <Close size={18} />
+              </button>
+            </div>
           </div>
-          <button
-            style={styles.iconBtn}
-            onClick={onToggleTheme}
-            aria-label="Alternar tema"
-            title="Alternar tema"
-          >
-            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+
+          <div style={styles.statusCard}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                background: connected ? "var(--online-soft)" : "rgba(239,68,68,0.12)",
+                color: connected ? "var(--online)" : "var(--danger)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Wifi size={16} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={styles.statusText}>
+                {connected ? "Conectado em tempo real" : "Reconectando…"}
+              </div>
+              <div style={styles.statusSub}>
+                {connected ? "Posições atualizadas a cada segundo" : "Verifique sua conexão"}
+              </div>
+            </div>
+            {connected && <span className="live-dot" />}
+          </div>
+        </div>
+
+        <div style={styles.searchWrap}>
+          <Search size={16} style={styles.searchIcon} />
+          <input
+            style={styles.searchInput}
+            placeholder="Pesquisar linhas, paradas…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+          />
+        </div>
+
+        <div style={styles.statsRow}>
+          <div style={styles.statCard}>
+            <div style={styles.statValue}>
+              {routes.length}
+              <span className="chip chip-info" style={{ fontSize: 9 }}>linhas</span>
+            </div>
+            <div style={styles.statLabel}>Cadastradas no sistema</div>
+          </div>
+          <div style={styles.statCard}>
+            <div style={styles.statValue}>
+              {activeBuses.length}
+              {activeBuses.length > 0 && <span className="live-dot" style={{ marginLeft: 2 }} />}
+            </div>
+            <div style={styles.statLabel}>Ônibus online agora</div>
+          </div>
+        </div>
+
+        <div style={styles.tabs}>
+          <button style={styles.tab(tab === "all")} onClick={() => setTab("all")}>
+            Todas
+          </button>
+          <button style={styles.tab(tab === "favorites")} onClick={() => setTab("favorites")}>
+            <Star size={13} /> Favoritas
           </button>
         </div>
 
-        <div style={styles.statusCard}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              background: connected ? "var(--online-soft)" : "rgba(239,68,68,0.12)",
-              color: connected ? "var(--online)" : "var(--danger)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Wifi size={16} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={styles.statusText}>
-              {connected ? "Conectado em tempo real" : "Reconectando…"}
-            </div>
-            <div style={styles.statusSub}>
-              {connected ? "Posições atualizadas a cada segundo" : "Verifique sua conexão"}
-            </div>
-          </div>
-          {connected && <span className="live-dot" />}
-        </div>
-      </div>
-
-      <div style={styles.searchWrap}>
-        <Search size={16} style={styles.searchIcon} />
-        <input
-          style={styles.searchInput}
-          placeholder="Pesquisar linhas, paradas…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
-          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-        />
-      </div>
-
-      <div style={styles.statsRow}>
-        <div style={styles.statCard}>
-          <div style={styles.statValue}>
-            {routes.length}
-            <span className="chip chip-info" style={{ fontSize: 9 }}>linhas</span>
-          </div>
-          <div style={styles.statLabel}>Cadastradas no sistema</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statValue}>
-            {activeBuses.length}
-            {activeBuses.length > 0 && <span className="live-dot" style={{ marginLeft: 2 }} />}
-          </div>
-          <div style={styles.statLabel}>Ônibus online agora</div>
-        </div>
-      </div>
-
-      <div style={styles.tabs}>
-        <button style={styles.tab(tab === "all")} onClick={() => setTab("all")}>
-          Todas
-        </button>
-        <button style={styles.tab(tab === "favorites")} onClick={() => setTab("favorites")}>
-          <Star size={13} /> Favoritas
-        </button>
-      </div>
-
-      <div style={styles.scroll}>
-        <div style={styles.section}>
-          <span>Linhas</span>
-          {selectedRoute && (
-            <button
-              onClick={() => onSelectRoute(null)}
-              style={{
-                fontSize: 10.5,
-                color: "var(--primary)",
-                textTransform: "none",
-                letterSpacing: 0,
-                fontWeight: 600,
-              }}
-            >
-              Limpar filtro
-            </button>
-          )}
-        </div>
-
-        {filteredRoutes.length === 0 ? (
-          <div style={styles.emptyState}>
-            {tab === "favorites"
-              ? "Você ainda não favoritou nenhuma linha. Toque na estrela ao lado de uma linha para salvá-la."
-              : "Nenhuma linha encontrada com esse termo."}
-          </div>
-        ) : (
-          filteredRoutes.map((route) => {
-            const active = selectedRoute === route.id;
-            const isFav = favorites.has(route.id);
-            const onlineCount = activeBuses.filter((b) => b.routeId === route.id).length;
-            return (
-              <div
-                key={route.id}
-                style={styles.routeCard(active)}
-                onClick={() => onSelectRoute(active ? null : route.id)}
-                className="animate-in"
-                onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.background = "var(--hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.background = "transparent";
+        <div style={styles.scroll}>
+          <div style={styles.section}>
+            <span>Linhas</span>
+            {selectedRoute && (
+              <button
+                onClick={() => onSelectRoute(null)}
+                style={{
+                  fontSize: 10.5,
+                  color: "var(--primary)",
+                  textTransform: "none",
+                  letterSpacing: 0,
+                  fontWeight: 600,
                 }}
               >
-                <span style={styles.routeColor(route.color)} />
-                <div style={{ overflow: "hidden", flex: 1 }}>
-                  <div style={styles.routeName}>{route.name}</div>
-                  <div style={styles.routeMeta}>
-                    <span style={styles.routeMetaItem}>
-                      <MapPin size={11} /> {route.stops.length} paradas
-                    </span>
-                    {onlineCount > 0 ? (
-                      <span className="chip chip-online">
-                        <span className="live-dot" /> {onlineCount} ativo{onlineCount > 1 ? "s" : ""}
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Sem ônibus</span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  style={styles.favBtn}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleFavorite(route.id);
+                Limpar filtro
+              </button>
+            )}
+          </div>
+
+          {filteredRoutes.length === 0 ? (
+            <div style={styles.emptyState}>
+              {tab === "favorites"
+                ? "Você ainda não favoritou nenhuma linha. Toque na estrela ao lado de uma linha para salvá-la."
+                : "Nenhuma linha encontrada com esse termo."}
+            </div>
+          ) : (
+            filteredRoutes.map((route) => {
+              const active = selectedRoute === route.id;
+              const isFav = favorites.has(route.id);
+              const onlineCount = activeBuses.filter((b) => b.routeId === route.id).length;
+              return (
+                <div
+                  key={route.id}
+                  style={styles.routeCard(active)}
+                  onClick={() => pickRoute(active ? null : route.id)}
+                  className="animate-in"
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.background = "var(--hover)";
                   }}
-                  aria-label="Favoritar linha"
-                  title={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.background = "transparent";
+                  }}
                 >
-                  {isFav ? (
-                    <StarFill size={16} style={{ color: "var(--accent)" }} />
-                  ) : (
-                    <Star size={16} />
-                  )}
-                </button>
-              </div>
-            );
-          })
-        )}
-
-        <div style={styles.section}>
-          <span>Ônibus online</span>
-          {activeBuses.length > 0 && (
-            <span className="chip chip-online" style={{ fontSize: 10 }}>
-              <span className="live-dot" /> ao vivo
-            </span>
-          )}
-        </div>
-
-        {activeBuses.length === 0 ? (
-          <div style={styles.emptyState}>
-            Nenhum ônibus online no momento.<br />
-            <span style={{ fontSize: 11.5, opacity: 0.7 }}>
-              Eles aparecem aqui em tempo real quando começam a rodar.
-            </span>
-          </div>
-        ) : (
-          activeBuses.map((bus) => {
-            const color = routeColorById[bus.routeId] || "#3b82f6";
-            const active = selectedBusId === bus.id;
-            return (
-              <div
-                key={bus.id}
-                style={styles.busCard(active)}
-                onClick={() => onSelectBus(active ? null : bus.id)}
-                className="animate-in"
-              >
-                <div style={styles.busAvatar(color)}>
-                  <Bus size={18} />
+                  <span style={styles.routeColor(route.color)} />
+                  <div style={{ overflow: "hidden", flex: 1 }}>
+                    <div style={styles.routeName}>{route.name}</div>
+                    <div style={styles.routeMeta}>
+                      <span style={styles.routeMetaItem}>
+                        <MapPin size={11} /> {route.stops.length} paradas
+                      </span>
+                      {onlineCount > 0 ? (
+                        <span className="chip chip-online">
+                          <span className="live-dot" /> {onlineCount} ativo{onlineCount > 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Sem ônibus</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    style={styles.favBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleFavorite(route.id);
+                    }}
+                    aria-label="Favoritar linha"
+                    title={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    {isFav ? (
+                      <StarFill size={16} style={{ color: "var(--accent)" }} />
+                    ) : (
+                      <Star size={16} />
+                    )}
+                  </button>
                 </div>
-                <div style={{ overflow: "hidden", flex: 1 }}>
-                  <div style={styles.busName}>{bus.driverName}</div>
-                  <div style={styles.busMeta}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                      <Users size={11} />
-                      {bus.speed > 0 ? `${Math.round(bus.speed)} km/h` : "Parado"}
-                    </span>
-                    <span style={{ opacity: 0.4 }}>•</span>
-                    <span className="chip chip-online" style={{ padding: "2px 8px" }}>
-                      <span className="live-dot" /> ao vivo
-                    </span>
+              );
+            })
+          )}
+
+          <div style={styles.section}>
+            <span>Ônibus online</span>
+            {activeBuses.length > 0 && (
+              <span className="chip chip-online" style={{ fontSize: 10 }}>
+                <span className="live-dot" /> ao vivo
+              </span>
+            )}
+          </div>
+
+          {activeBuses.length === 0 ? (
+            <div style={styles.emptyState}>
+              Nenhum ônibus online no momento.<br />
+              <span style={{ fontSize: 11.5, opacity: 0.7 }}>
+                Eles aparecem aqui em tempo real quando começam a rodar.
+              </span>
+            </div>
+          ) : (
+            activeBuses.map((bus) => {
+              const color = routeColorById[bus.routeId] || "#3b82f6";
+              const active = selectedBusId === bus.id;
+              return (
+                <div
+                  key={bus.id}
+                  style={styles.busCard(active)}
+                  onClick={() => pickBus(active ? null : bus.id)}
+                  className="animate-in"
+                >
+                  <div style={styles.busAvatar(color)}>
+                    <Bus size={18} />
+                  </div>
+                  <div style={{ overflow: "hidden", flex: 1 }}>
+                    <div style={styles.busName}>{bus.driverName}</div>
+                    <div style={styles.busMeta}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <Users size={11} />
+                        {bus.speed > 0 ? `${Math.round(bus.speed)} km/h` : "Parado"}
+                      </span>
+                      <span style={{ opacity: 0.4 }}>•</span>
+                      <span className="chip chip-online" style={{ padding: "2px 8px" }}>
+                        <span className="live-dot" /> ao vivo
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </aside>
+              );
+            })
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

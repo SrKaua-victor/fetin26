@@ -317,8 +317,10 @@ input { font-family: inherit; }
 
 /* ───────────────── Responsive ───────────────── */
 
-/* A alça só existe no celular, onde o painel vira folha. */
-.sheet-grab { display: none; }
+/* Botão de abrir, fundo e X só existem no celular, onde o painel vira gaveta. */
+.menu-fab,
+.panel-close,
+.panel-backdrop { display: none !important; }
 
 @media (max-width: 900px) {
   /* O mapa passa a ocupar a tela inteira. Antes o painel media 100vw e o mapa
@@ -328,64 +330,82 @@ input { font-family: inherit; }
 
   .map-area { left: 0 !important; }
 
-  /* Painel vira folha inferior sobre o mapa, no lugar de coluna à esquerda.
-     Os !important existem porque essas propriedades vêm de estilos inline no
-     componente, que de outro modo venceriam a folha de estilo. */
+  /* Painel vira gaveta lateral, fechada por padrão, que abre pelo botão
+     "Linhas". Antes era uma folha inferior sempre meio aberta, que tomava a
+     parte de baixo do mapa mesmo recolhida. Os !important existem porque essas
+     propriedades vêm de estilos inline no componente. */
   .panel {
-    top: auto !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 70dvh !important;
-    border-right: none !important;
-    border-top: 1px solid var(--border);
-    border-radius: 20px 20px 0 0;
-    /* Recolhida, mostra só a alça e o cabeçalho */
-    transform: translateY(calc(70dvh - 168px));
+    width: min(88vw, 360px) !important;
+    border-radius: 0 20px 20px 0;
+    /* Fundo sólido: sobre o mapa, o translúcido deixava ruas atravessando o texto */
+    background: var(--surface-solid) !important;
+    transform: translateX(-100%);
+    /* Fechada, sai da ordem de tabulação e do leitor de tela. O visibility só
+       vira hidden depois que a animação de saída termina. */
+    visibility: hidden;
+    transition:
+      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0.3s;
+  }
+  .panel-open {
+    transform: none;
+    visibility: visible;
     transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .panel-open { transform: translateY(0); }
 
-  .sheet-grab {
-    display: flex;
+  .panel-backdrop {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    z-index: 999;
+    background: rgba(8, 13, 23, 0.45);
+    animation: backdrop-in 0.2s ease;
+  }
+
+  .panel-close { display: flex !important; }
+
+  .menu-fab {
+    display: inline-flex !important;
     align-items: center;
-    justify-content: center;
-    width: 100%;
-    /* Alvo de toque confortável, mesmo com a barra visual sendo fina */
-    height: 26px;
-    padding: 0;
-    border: none;
-    background: transparent;
+    gap: 8px;
+    position: absolute;
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    left: 14px;
+    z-index: 950;
+    height: 46px;
+    padding: 0 18px 0 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface-solid);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    font-weight: 700;
     cursor: pointer;
-    flex-shrink: 0;
   }
-  .sheet-grab-bar {
-    width: 40px;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--border-strong, rgba(15, 23, 42, 0.18));
-  }
+  .menu-fab .live-dot { margin-left: 2px; }
 
-  /* Sobe a atribuição para acima da folha recolhida. O painel é translúcido, e
-     sem isto o texto do Leaflet aparecia atravessando o fundo dele. */
-  .leaflet-control-attribution {
-    margin-bottom: 176px !important;
-  }
-
-  /* O painel de detalhe do ônibus também acompanha a folha, senão cobriria
-     o mapa inteiro no topo. */
+  /* Com a lista fora da tela, o detalhe do ônibus desce para o rodapé e deixa
+     o mapa livre no topo. */
   .detail-panel {
     top: auto !important;
-    bottom: calc(70dvh - 168px + 12px) !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
     left: 12px !important;
     right: 12px !important;
     width: auto !important;
-    max-height: 46dvh !important;
+    max-height: 55dvh !important;
   }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .panel { transition: none !important; }
+  .panel-backdrop { animation: none; }
 }
 
 /* Não existe tile escuro oficial do OpenStreetMap, e o CARTO (que tinha um)
