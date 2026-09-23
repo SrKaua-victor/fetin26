@@ -132,6 +132,9 @@ const SAVE_HEARTBEAT_MS = 30000;
 // do GPS (10 a 20 m) para não perder chegadas, e abaixo do espaçamento entre
 // paradas para não marcar a vizinha junto.
 const STOP_REACHED_METERS = 50;
+// Tempo mínimo desde o registro de uma parada para que passar por ela de novo
+// conte como volta nova, e não como oscilação de GPS no mesmo ponto.
+const NEW_LAP_MIN_SECONDS = 60;
 
 /**
  * Ocorrências que o motorista pode informar.
@@ -874,25 +877,52 @@ function registerStopArrivals(bus, points) {
   // posições) numa linha de 12 paradas dispararia 12 mil INSERTs, todos
   // descartados pela chave composta. A lista em memória basta — a chave continua
   // garantindo a unicidade se ela estiver desatualizada.
-  const already = new Set((bus.reachedStops || getTripStops(bus.tripId)).map((s) => s.stopId));
+  const registered = new Map(
+    (bus.reachedStops || getTripStops(bus.tripId)).map((s) => [s.stopId, s])
+  );
+  const orderById = new Map(route.stops.map((s) => [s.id, s.order ?? 0]));
+  const highestOrder = () =>
+    Math.max(-1, ...[...registered.keys()].map((id) => orderById.get(id) ?? -1));
+  let furthest = highestOrder();
 
   const reached = [];
+  let restarted = false;
+
   for (const point of points) {
     for (const stop of route.stops) {
-      if (already.has(stop.id)) continue;
-
       const meters = distanceMeters(point, { lat: stop.lat, lng: stop.lng });
       if (meters > STOP_REACHED_METERS) continue;
 
+      if (registered.has(stop.id)) {
+        // Voltar a uma parada anterior à mais distante já registrada significa
+        // que o ônibus recomeçou a linha. O cliente pode avisar com driver:lap,
+        // mas não dá para depender disso: sem este reinício a volta nova ficaria
+        // com o roteiro todo riscado e as passagens seguintes seriam ignoradas,
+        // porque a parada já consta registrada.
+        const order = orderById.get(stop.id) ?? 0;
+        const since = Date.now() - new Date(registered.get(stop.id).reachedAt).getTime();
+        // A espera evita reiniciar por oscilação de GPS enquanto o ônibus está
+        // parado no ponto, ou por manobra de poucos metros.
+        if (order >= furthest || since < NEW_LAP_MIN_SECONDS * 1000) continue;
+
+        clearTripStops(bus.tripId);
+        registered.clear();
+        reached.length = 0;
+        furthest = -1;
+        restarted = true;
+        console.log(`[viagem] ${bus.plate || bus.driverName}: nova volta detectada, roteiro reiniciado`);
+      }
+
       const at = point.recordedAt || new Date().toISOString();
       if (markStopReached(bus.tripId, stop, at)) {
-        already.add(stop.id);
+        registered.set(stop.id, { stopId: stop.id, stopName: stop.name, reachedAt: at });
+        furthest = Math.max(furthest, orderById.get(stop.id) ?? -1);
         reached.push({ stopId: stop.id, stopName: stop.name, reachedAt: at });
         console.log(`[parada] ${bus.plate || bus.driverName} chegou em "${stop.name}"`);
       }
     }
   }
-  return reached;
+  return { reached, restarted };
 }
 
 /**
@@ -900,8 +930,8 @@ function registerStopArrivals(bus, points) {
  * memória para quem entrar depois já receber a lista completa.
  */
 function handleStopArrivals(bus, points) {
-  const reached = registerStopArrivals(bus, points);
-  if (reached.length === 0) return;
+  const { reached, restarted } = registerStopArrivals(bus, points);
+  if (!restarted && reached.length === 0) return;
 
   const current = state.buses.get(bus.id);
   if (current) {
@@ -910,6 +940,10 @@ function handleStopArrivals(bus, points) {
       reachedStops: getTripStops(bus.tripId),
     });
   }
+
+  // O reinício vem antes das chegadas: quem estiver olhando limpa o roteiro e
+  // só então recebe a primeira parada da volta nova.
+  if (restarted) io.emit("bus:stops-reset", { busId: bus.id, tripId: bus.tripId });
 
   for (const stop of reached) {
     io.emit("bus:stop-reached", { busId: bus.id, tripId: bus.tripId, ...stop });
