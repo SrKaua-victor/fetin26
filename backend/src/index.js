@@ -543,6 +543,17 @@ app.get("/bustrack.apk", (_req, res) => {
   res.download(apkPath, "bustrack-motorista.apk");
 });
 
+// Simulador de ônibus: percorre uma linha enviando GPS como se fosse o app do
+// motorista. Serve para apresentar o sistema sem ninguém dirigindo. Não é uma
+// porta nova — ele entra pelo mesmo login de motorista que o app usa.
+const simuladorPath = join(webRoot, "driver-simulator.html");
+app.get("/simulador", (_req, res) => {
+  if (!existsSync(simuladorPath)) {
+    return res.status(404).json({ error: "Simulador não encontrado" });
+  }
+  res.sendFile(simuladorPath);
+});
+
 // Endereço antigo, de quando as páginas usavam nomes em inglês. As rotas de API
 // (/api/driver/...) continuam como estão — mudá-las quebraria os APKs instalados.
 app.get(["/driver", "/driver/*"], (req, res) =>

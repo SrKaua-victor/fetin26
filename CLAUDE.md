@@ -148,6 +148,11 @@ gh release delete-asset v1.0.0 bustrack-motorista.apk --yes
 gh release upload v1.0.0 <caminho>/bustrack-motorista.apk
 ```
 
+**Simulador de ônibus** em `/simulador` (arquivo `driver-simulator.html`): entra pelo
+login normal de motorista, percorre a linha escolhida enviando GPS e tem botões para
+provocar ocorrência e sair da rota. É como apresentar o sistema sem ninguém dirigindo.
+Ele não abre porta nova — sem matrícula e senha válidas não registra nada.
+
 **Depois de gerar um APK, confira o que ficou embutido** — abrir o zip e procurar
 a URL no bundle já pegou APK publicado apontando para servidor antigo.
 

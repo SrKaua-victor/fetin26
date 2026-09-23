@@ -2,172 +2,421 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>BusTrack — Simulador de Motorista</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BusTrack — Simulador de Ônibus</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
-    body { background: #0a0e1a; color: #f0f4ff; padding: 40px; min-height: 100vh; }
-    .container { max-width: 500px; margin: 0 auto; }
-    h1 { font-size: 24px; margin-bottom: 8px; }
-    p.subtitle { color: #8895b3; font-size: 13px; margin-bottom: 24px; }
-    label { display: block; margin-top: 16px; font-size: 12px; color: #8895b3; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
-    input, select, button { width: 100%; padding: 10px 14px; margin-top: 6px; background: #1a2236; color: #f0f4ff; border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; font-size: 14px; }
-    button { background: #FF6B35; border: none; font-weight: 700; margin-top: 20px; cursor: pointer; transition: opacity 0.15s; }
-    button:hover { opacity: 0.9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .status { margin-top: 20px; padding: 16px; background: #111827; border-radius: 10px; font-size: 13px; }
-    .status strong { color: #FF6B35; }
-    .log { margin-top: 16px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #8895b3; }
-    .log div { padding: 2px 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #0a0e1a; color: #f0f4ff; padding: 28px 20px; min-height: 100vh;
+    }
+    .container { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 22px; letter-spacing: -0.02em; }
+    .subtitle { color: #8895b3; font-size: 13px; margin: 6px 0 22px; line-height: 1.5; }
+
+    .card {
+      background: #111827; border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px; padding: 18px; margin-bottom: 14px;
+    }
+    .card h2 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: #8895b3; margin-bottom: 12px;
+    }
+    label { display: block; margin-top: 12px; font-size: 12px; color: #8895b3; font-weight: 600; }
+    label:first-of-type { margin-top: 0; }
+    input, select {
+      width: 100%; padding: 10px 12px; margin-top: 5px; background: #1a2236; color: #f0f4ff;
+      border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; font-size: 14px;
+    }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: #c7d2e8; }
+    .check input { width: auto; margin: 0; }
+
+    button {
+      padding: 11px 14px; border: none; border-radius: 9px; font-size: 14px;
+      font-weight: 700; cursor: pointer; background: #1a2236; color: #f0f4ff;
+      border: 1px solid rgba(255,255,255,0.09);
+    }
+    button:hover:not(:disabled) { filter: brightness(1.18); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .primary { background: #FF6B35; border-color: #FF6B35; color: #fff; width: 100%; margin-top: 16px; }
+    .danger { background: #ef4444; border-color: #ef4444; color: #fff; width: 100%; margin-top: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid button { font-size: 13px; font-weight: 600; }
+    .on { background: #FF6B35; border-color: #FF6B35; color: #fff; }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat { background: #1a2236; border-radius: 10px; padding: 10px 12px; }
+    .stat .v { font-size: 17px; font-weight: 700; }
+    .stat .k { font-size: 10.5px; color: #8895b3; margin-top: 2px; }
+    .bar { height: 6px; background: #1a2236; border-radius: 99px; overflow: hidden; margin-top: 12px; }
+    .bar > i { display: block; height: 100%; background: #FF6B35; width: 0; transition: width 0.4s linear; }
+
+    .log {
+      margin-top: 12px; max-height: 190px; overflow-y: auto;
+      font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #8895b3;
+    }
+    .log div { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .log .ok { color: #4ade80; }
+    .log .err { color: #f87171; }
+    .hide { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🚌 Simulador de Motorista</h1>
-    <p class="subtitle">Simula o app do motorista enviando GPS para o servidor em tempo real.</p>
+    <h1>🚌 Simulador de Ônibus</h1>
+    <p class="subtitle">
+      Entra como um motorista de verdade e percorre a linha enviando GPS ao servidor.
+      Serve para apresentar o sistema funcionando sem precisar de alguém dirigindo.
+    </p>
 
-    <label>Nome do motorista</label>
-    <input id="driverName" value="João Silva" />
-
-    <label>Rota</label>
-    <select id="routeSelect"></select>
-
-    <label>Intervalo (ms)</label>
-    <input id="interval" type="number" value="1000" />
-
-    <button id="startBtn">Iniciar percurso</button>
-    <button id="stopBtn" style="background:#ef4444; margin-top:8px" disabled>Parar</button>
-
-    <div class="status">
-      <div>Status: <strong id="status">Desconectado</strong></div>
-      <div>Posição atual: <span id="pos">—</span></div>
-      <div>Velocidade: <span id="speed">0</span> km/h</div>
+    <!-- ── Login ───────────────────────────────────────────────────────── -->
+    <div class="card" id="cardLogin">
+      <h2>Entrar</h2>
+      <label>Endereço do servidor</label>
+      <input id="server" />
+      <div class="row">
+        <div>
+          <label>Matrícula</label>
+          <input id="registration" value="1001" />
+        </div>
+        <div>
+          <label>Senha</label>
+          <input id="password" type="password" value="1234" />
+        </div>
+      </div>
+      <button class="primary" id="btnLogin">Entrar</button>
     </div>
 
-    <div class="log" id="log"></div>
+    <!-- ── Percurso ────────────────────────────────────────────────────── -->
+    <div class="card hide" id="cardSetup">
+      <h2>Percurso</h2>
+      <label>Ônibus</label>
+      <select id="vehicle"></select>
+      <label>Linha</label>
+      <select id="route"></select>
+      <div class="row">
+        <div>
+          <label>Velocidade (km/h)</label>
+          <input id="speed" type="number" value="35" min="5" max="120" />
+        </div>
+        <div>
+          <label>Parada (segundos)</label>
+          <input id="dwell" type="number" value="6" min="0" max="60" />
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="loop" checked /> Recomeçar ao chegar no fim da linha</label>
+      <button class="primary" id="btnStart">Iniciar viagem</button>
+    </div>
+
+    <!-- ── Em viagem ───────────────────────────────────────────────────── -->
+    <div class="card hide" id="cardLive">
+      <h2>Em viagem</h2>
+      <div class="stats">
+        <div class="stat"><div class="v" id="vSpeed">0 km/h</div><div class="k">Velocidade</div></div>
+        <div class="stat"><div class="v" id="vNext">—</div><div class="k">Próxima parada</div></div>
+        <div class="stat"><div class="v" id="vStops">0</div><div class="k">Paradas registradas</div></div>
+        <div class="stat"><div class="v" id="vLap">1</div><div class="k">Volta</div></div>
+      </div>
+      <div class="bar"><i id="vBar"></i></div>
+      <button class="danger" id="btnStop">Encerrar viagem</button>
+    </div>
+
+    <!-- ── Demonstrações ───────────────────────────────────────────────── -->
+    <div class="card hide" id="cardDemo">
+      <h2>Para demonstrar na apresentação</h2>
+      <div class="grid">
+        <button data-reason="traffic">Trânsito</button>
+        <button data-reason="accident">Acidente</button>
+        <button data-reason="breakdown">Avaria</button>
+        <button data-reason="boarding">Embarque</button>
+      </div>
+      <button id="btnNormal" style="width:100%; margin-top:8px">Voltou ao normal</button>
+      <button id="btnDetour" style="width:100%; margin-top:8px">Sair da rota</button>
+      <p class="subtitle" style="margin:10px 0 0">
+        A ocorrência aparece para o passageiro com o tempo decorrido. Sair da rota faz o site
+        traçar o caminho ajustado até a próxima parada, sem apagar o traçado da linha.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Registro</h2>
+      <div class="log" id="log"></div>
+    </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <!-- O próprio servidor entrega a biblioteca do Socket.IO; o onerror cobre o
+       caso de abrir este arquivo solto, fora do servidor. -->
+  <script src="/socket.io/socket.io.js" onerror="
+    var s=document.createElement('script');
+    s.src='http://localhost:3001/socket.io/socket.io.js';
+    document.head.appendChild(s);
+  "></script>
+
   <script>
-    const SERVER = "http://localhost:3001";
-    const socket = io(SERVER, { transports: ["websocket"] });
+    // ── Endereço do servidor ────────────────────────────────────────────
+    // Servido pelo backend (/simulador), usa a própria origem. Aberto como
+    // arquivo solto, cai no localhost.
+    const mesmaOrigem = location.protocol.startsWith("http");
+    const base = mesmaOrigem ? location.origin : "http://localhost:3001";
+    document.getElementById("server").value = base;
 
-    let interval = null;
-    let pathIndex = 0;
-    let routes = [];
-    let currentRoute = null;
-
-    const $status = document.getElementById("status");
-    const $pos = document.getElementById("pos");
-    const $speed = document.getElementById("speed");
-    const $log = document.getElementById("log");
-    const $start = document.getElementById("startBtn");
-    const $stop = document.getElementById("stopBtn");
-
-    function log(msg) {
+    const $ = (id) => document.getElementById(id);
+    const log = (msg, cls = "") => {
       const d = document.createElement("div");
-      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      $log.prepend(d);
-    }
+      if (cls) d.className = cls;
+      d.textContent = new Date().toLocaleTimeString("pt-BR") + "  " + msg;
+      $("log").prepend(d);
+    };
 
-    socket.on("connect", () => {
-      $status.textContent = "Conectado";
-      log("Conectado ao servidor");
-    });
+    let socket = null;
+    let token = null;
+    let routes = [];
+    let vehicles = [];
 
-    socket.on("disconnect", () => {
-      $status.textContent = "Desconectado";
-      log("Desconectado");
-    });
+    // ── Geometria ───────────────────────────────────────────────────────
+    const R = 6371000;
+    const rad = (g) => (g * Math.PI) / 180;
 
-    socket.on("init", ({ routes: r }) => {
-      routes = r;
-      const sel = document.getElementById("routeSelect");
-      sel.innerHTML = r.map(route => `<option value="${route.id}">${route.name}</option>`).join("");
-      log(`${r.length} rotas carregadas`);
-    });
-
-    // Interpola entre dois pontos
-    function interpolate(a, b, t) {
-      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    }
-
-    // Distância aproximada em metros (haversine simplificado)
-    function distanceMeters(a, b) {
-      const R = 6371000;
-      const dLat = (b[0] - a[0]) * Math.PI / 180;
-      const dLng = (b[1] - a[1]) * Math.PI / 180;
-      const lat1 = a[0] * Math.PI / 180;
-      const lat2 = b[0] * Math.PI / 180;
-      const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+    function metros(a, b) {
+      const dLat = rad(b[0] - a[0]);
+      const dLng = rad(b[1] - a[1]);
+      const x = Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLng / 2) ** 2;
       return 2 * R * Math.asin(Math.sqrt(x));
     }
 
-    // Bearing entre dois pontos (graus, 0 = norte)
-    function bearing(a, b) {
-      const lat1 = a[0] * Math.PI / 180;
-      const lat2 = b[0] * Math.PI / 180;
-      const dLng = (b[1] - a[1]) * Math.PI / 180;
-      const y = Math.sin(dLng) * Math.cos(lat2);
-      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-      return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+    function rumo(a, b) {
+      const y = Math.sin(rad(b[1] - a[1])) * Math.cos(rad(b[0]));
+      const x = Math.cos(rad(a[0])) * Math.sin(rad(b[0])) -
+        Math.sin(rad(a[0])) * Math.cos(rad(b[0])) * Math.cos(rad(b[1] - a[1]));
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     }
 
-    $start.addEventListener("click", () => {
-      const driverName = document.getElementById("driverName").value;
-      const routeId = document.getElementById("routeSelect").value;
-      const intervalMs = parseInt(document.getElementById("interval").value);
+    // Desloca um ponto por uma distância em metros num dado rumo. Usado para
+    // jogar o ônibus para fora da rota na demonstração de desvio.
+    function deslocar([lat, lng], distancia, grausRumo) {
+      const dLat = (distancia * Math.cos(rad(grausRumo))) / R;
+      const dLng = (distancia * Math.sin(rad(grausRumo))) / (R * Math.cos(rad(lat)));
+      return [lat + (dLat * 180) / Math.PI, lng + (dLng * 180) / Math.PI];
+    }
 
-      currentRoute = routes.find(r => r.id === routeId);
-      if (!currentRoute || !currentRoute.path.length) {
-        alert("Selecione uma rota com traçado válido");
+    /**
+     * Prepara o traçado da linha para ser percorrido por distância, e não por
+     * índice de ponto: os pontos da rota são irregulares, então andar "um ponto
+     * por segundo" daria uma velocidade que varia sozinha a cada trecho.
+     */
+    function prepararTracado(path) {
+      const trechos = [];
+      let total = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        const d = metros(path[i], path[i + 1]);
+        if (d === 0) continue;
+        trechos.push({ de: path[i], para: path[i + 1], inicio: total, comprimento: d });
+        total += d;
+      }
+      return { trechos, total };
+    }
+
+    function pontoEm(tracado, percorrido) {
+      const t = tracado.trechos.find((s) => percorrido < s.inicio + s.comprimento)
+        || tracado.trechos[tracado.trechos.length - 1];
+      const f = Math.min(1, (percorrido - t.inicio) / t.comprimento);
+      return {
+        pos: [t.de[0] + (t.para[0] - t.de[0]) * f, t.de[1] + (t.para[1] - t.de[1]) * f],
+        rumo: rumo(t.de, t.para),
+      };
+    }
+
+    // ── Login e listas ──────────────────────────────────────────────────
+    $("btnLogin").onclick = async () => {
+      const servidor = $("server").value.replace(/\/+$/, "");
+      try {
+        const r = await fetch(servidor + "/api/driver/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            registration: $("registration").value.trim(),
+            password: $("password").value,
+          }),
+        });
+        const dados = await r.json();
+        if (!r.ok) throw new Error(dados.error || "falha no login");
+
+        token = dados.token;
+        log("entrou como " + dados.driver.name, "ok");
+
+        [vehicles, routes] = await Promise.all([
+          fetch(servidor + "/api/vehicles").then((x) => x.json()),
+          fetch(servidor + "/api/routes").then((x) => x.json()),
+        ]);
+
+        $("vehicle").innerHTML = vehicles
+          .filter((v) => v.active !== false)
+          .map((v) => `<option value="${v.id}">${v.plate} — ${v.model || "ônibus"}</option>`)
+          .join("");
+        $("route").innerHTML = routes
+          .filter((r2) => r2.active !== false)
+          .map((r2) => `<option value="${r2.id}">${r2.name} (${r2.stops.length} paradas)</option>`)
+          .join("");
+
+        conectar(servidor);
+        $("cardLogin").classList.add("hide");
+        $("cardSetup").classList.remove("hide");
+      } catch (e) {
+        log(e.message, "err");
+      }
+    };
+
+    function conectar(servidor) {
+      socket = io(servidor, { transports: ["websocket"] });
+      socket.on("connect", () => log("conectado à central", "ok"));
+      socket.on("disconnect", () => log("desconectado da central", "err"));
+      // Confirmação vinda do servidor, não do simulador: prova que a parada
+      // entrou mesmo no banco.
+      socket.on("bus:stop-reached", (p) => {
+        if (p.tripId !== viagem.tripId) return;
+        viagem.registradas++;
+        $("vStops").textContent = viagem.registradas;
+        log("parada registrada: " + p.stopName, "ok");
+      });
+    }
+
+    // ── Viagem ──────────────────────────────────────────────────────────
+    const viagem = {
+      timer: null, tracado: null, percorrido: 0, parado: 0,
+      paradas: [], visitadas: new Set(), registradas: 0, volta: 1,
+      desvio: 0, tripId: null,
+    };
+
+    $("btnStart").onclick = () => {
+      const rota = routes.find((r) => r.id === $("route").value);
+      socket.emit(
+        "driver:register",
+        { token, vehicleId: $("vehicle").value, routeId: rota.id },
+        (resposta) => {
+          if (!resposta?.ok) {
+            log(resposta?.error || "o servidor recusou a viagem", "err");
+            return;
+          }
+          viagem.tripId = resposta.tripId || resposta.trip?.id || null;
+          viagem.tracado = prepararTracado(rota.path);
+          viagem.paradas = rota.stops;
+          viagem.percorrido = 0;
+          viagem.parado = 0;
+          viagem.visitadas = new Set();
+          viagem.registradas = 0;
+          viagem.volta = 1;
+          viagem.desvio = 0;
+
+          $("cardSetup").classList.add("hide");
+          $("cardLive").classList.remove("hide");
+          $("cardDemo").classList.remove("hide");
+          $("vStops").textContent = "0";
+          $("vLap").textContent = "1";
+          $("btnDetour").classList.remove("on");
+          $("btnDetour").textContent = "Sair da rota";
+
+          log("viagem iniciada em " + rota.name, "ok");
+          viagem.timer = setInterval(passo, 1000);
+        }
+      );
+    };
+
+    function passo() {
+      const kmh = Math.max(1, Number($("speed").value) || 35);
+      const espera = Math.max(0, Number($("dwell").value) || 0);
+
+      // Parado no ponto: continua mandando posição, senão o ônibus some do mapa
+      if (viagem.parado > 0) {
+        viagem.parado--;
+        enviar(pontoEm(viagem.tracado, viagem.percorrido), 0);
         return;
       }
 
-      socket.emit("driver:register", { driverName, routeId });
-      log(`Registrado como ${driverName} na rota ${currentRoute.name}`);
+      viagem.percorrido += (kmh / 3.6); // um tique por segundo
 
-      $start.disabled = true;
-      $stop.disabled = false;
-
-      // Expande o traçado para movimento suave (interpola 20 passos entre cada par de pontos)
-      const expanded = [];
-      for (let i = 0; i < currentRoute.path.length - 1; i++) {
-        for (let t = 0; t < 1; t += 0.05) {
-          expanded.push(interpolate(currentRoute.path[i], currentRoute.path[i+1], t));
+      if (viagem.percorrido >= viagem.tracado.total) {
+        if (!$("loop").checked) {
+          log("fim da linha");
+          encerrar();
+          return;
         }
+        viagem.percorrido = 0;
+        viagem.visitadas = new Set();
+        viagem.volta++;
+        $("vLap").textContent = viagem.volta;
+        log("fim da linha, recomeçando (volta " + viagem.volta + ")");
       }
-      expanded.push(currentRoute.path[currentRoute.path.length - 1]);
 
-      pathIndex = 0;
+      const atual = pontoEm(viagem.tracado, viagem.percorrido);
 
-      interval = setInterval(() => {
-        if (pathIndex >= expanded.length) pathIndex = 0; // loop
-        const pos = expanded[pathIndex];
-        const next = expanded[(pathIndex + 1) % expanded.length];
+      // Encosta no ponto: o servidor só registra a chegada dentro de 50 m, e
+      // parar ali é o que deixa a marcação visível na apresentação.
+      const proxima = viagem.paradas.find(
+        (s) => !viagem.visitadas.has(s.id) && metros(atual.pos, [s.lat, s.lng]) < 30
+      );
+      if (proxima && espera > 0) {
+        viagem.visitadas.add(proxima.id);
+        viagem.parado = espera;
+        log("parando em " + proxima.name);
+      }
 
-        const dist = distanceMeters(pos, next);
-        const speed = (dist / (intervalMs / 1000)) * 3.6; // km/h
-        const head = bearing(pos, next);
+      enviar(atual, kmh);
+    }
 
-        socket.emit("driver:location", {
-          lat: pos[0],
-          lng: pos[1],
-          speed: Math.min(speed, 60),
-          heading: head,
-        });
+    function enviar(ponto, kmh) {
+      let pos = ponto.pos;
+      // Desvio: joga o ônibus para o lado do traçado, 90° do rumo atual
+      if (viagem.desvio) pos = deslocar(pos, viagem.desvio, ponto.rumo + 90);
 
-        $pos.textContent = `${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}`;
-        $speed.textContent = Math.round(Math.min(speed, 60));
-        pathIndex++;
-      }, intervalMs);
+      socket.emit("driver:location", {
+        lat: pos[0], lng: pos[1],
+        speed: kmh, heading: ponto.rumo, accuracy: 8,
+        recordedAt: new Date().toISOString(),
+      });
+
+      $("vSpeed").textContent = Math.round(kmh) + " km/h";
+      $("vBar").style.width = ((viagem.percorrido / viagem.tracado.total) * 100).toFixed(1) + "%";
+      const falta = viagem.paradas
+        .map((s) => ({ nome: s.name, d: metros(pos, [s.lat, s.lng]) }))
+        .sort((a, b) => a.d - b.d)[0];
+      $("vNext").textContent = falta ? falta.nome.split(" ")[0] + " · " + Math.round(falta.d) + " m" : "—";
+    }
+
+    function encerrar() {
+      clearInterval(viagem.timer);
+      viagem.timer = null;
+      socket.emit("driver:stop", {}, () => log("viagem encerrada"));
+      $("cardLive").classList.add("hide");
+      $("cardDemo").classList.add("hide");
+      $("cardSetup").classList.remove("hide");
+    }
+
+    $("btnStop").onclick = encerrar;
+
+    // ── Demonstrações ───────────────────────────────────────────────────
+    document.querySelectorAll("[data-reason]").forEach((b) => {
+      b.onclick = () => avisar(b.dataset.reason, b);
     });
+    $("btnNormal").onclick = () => avisar(null, null);
 
-    $stop.addEventListener("click", () => {
-      if (interval) clearInterval(interval);
-      $start.disabled = false;
-      $stop.disabled = true;
-      log("Percurso interrompido");
-    });
+    function avisar(reason, botao) {
+      socket.emit("driver:status", { reason }, (resposta) => {
+        if (!resposta?.ok) return log(resposta?.error || "falha ao avisar", "err");
+        document.querySelectorAll("[data-reason]").forEach((b) => b.classList.remove("on"));
+        if (botao) botao.classList.add("on");
+        log(reason ? "ocorrência avisada: " + reason : "ocorrência encerrada", "ok");
+      });
+    }
+
+    $("btnDetour").onclick = () => {
+      viagem.desvio = viagem.desvio ? 0 : 150;
+      $("btnDetour").classList.toggle("on", !!viagem.desvio);
+      $("btnDetour").textContent = viagem.desvio ? "Voltar para a rota" : "Sair da rota";
+      log(viagem.desvio ? "saiu da rota (150 m)" : "voltou para a rota");
+    };
   </script>
 </body>
 </html>
