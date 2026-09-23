@@ -279,25 +279,41 @@ function computeRouteState(bus, route) {
   const stops = route.stops;
   const distances = stops.map((s) => haversine([bus.lat, bus.lng], [s.lat, s.lng]));
   const nearestIdx = distances.indexOf(Math.min(...distances));
+  const reached = new Set((bus.reachedStops || []).map((s) => s.stopId));
 
-  // Próxima parada: a partir do ponto mais próximo, decidimos pelo "ordem" → assumimos que ela é a próxima
-  const nextStop = stops[nearestIdx] || null;
-  const passedIdx = nearestIdx - 1;
-  const distanceKm = distances[nearestIdx] || 0;
+  // Próxima parada é a primeira ainda não registrada, na ordem da linha — não a
+  // mais perto em linha reta. Numa linha circular o ônibus volta a passar perto
+  // das primeiras paradas no fim do trajeto, e pela distância o painel anunciava
+  // como "próxima" uma parada que já tinha ficado para trás. A distância só
+  // decide quando não há registro nenhum: viagem antiga, ou ônibus que ainda não
+  // chegou perto o bastante de nenhuma parada.
+  let nextIdx;
+  if (reached.size > 0) {
+    nextIdx = stops.findIndex((s) => !reached.has(s.id));
+  } else {
+    nextIdx = nearestIdx;
+  }
+
+  // Todas registradas: acabou o trajeto. Apontar qualquer parada aqui seria
+  // apontar uma que já passou.
+  const finished = nextIdx === -1;
+  const nextStop = finished ? null : stops[nextIdx] || null;
+  const passedIdx = finished ? stops.length - 1 : nextIdx - 1;
+  const distanceKm = finished ? 0 : distances[nextIdx] || 0;
 
   const speed = bus.speed && bus.speed > 4 ? bus.speed : 18; // km/h, fallback se parado
   const etaMin = distanceKm > 0 ? Math.max(1, Math.round((distanceKm / speed) * 60)) : 0;
 
-  return { passedIdx, nextStop, distanceToNextKm: distanceKm, etaMin };
+  return { passedIdx, nextStop, distanceToNextKm: distanceKm, etaMin, finished };
 }
 
 export default function BusDetail({ bus, route, onClose }) {
   if (!bus || !route) return null;
   const color = route.color || "#2563eb";
 
-  const { passedIdx, nextStop, distanceToNextKm, etaMin } = useMemo(
+  const { passedIdx, nextStop, distanceToNextKm, etaMin, finished } = useMemo(
     () => computeRouteState(bus, route),
-    [bus.lat, bus.lng, bus.speed, route]
+    [bus.lat, bus.lng, bus.speed, route, bus.reachedStops]
   );
 
   // Chegadas registradas pelo servidor nesta viagem, indexadas para consulta
@@ -365,9 +381,13 @@ export default function BusDetail({ bus, route, onClose }) {
       )}
 
       <div style={styles.etaBlock}>
-        <div style={styles.etaLabel}>Tempo até a próxima parada</div>
+        <div style={styles.etaLabel}>
+          {finished ? "Trajeto" : "Tempo até a próxima parada"}
+        </div>
         <div style={styles.etaValue}>
-          {etaMin === null || etaMin === 0 ? (
+          {finished ? (
+            <span>Concluído</span>
+          ) : etaMin === null || etaMin === 0 ? (
             <>
               <span>Agora</span>
             </>
@@ -381,7 +401,9 @@ export default function BusDetail({ bus, route, onClose }) {
         <div style={styles.etaSub}>
           <MapPin size={14} style={{ color }} />
           <span>
-            {nextStop ? (
+            {finished ? (
+              "Passou por todas as paradas da linha"
+            ) : nextStop ? (
               <>
                 Próxima: <strong style={{ color: "var(--text)" }}>{nextStop.name}</strong>
               </>
