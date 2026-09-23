@@ -37,6 +37,7 @@ import {
   closeOrphanTrips,
   markStopReached,
   getTripStops,
+  clearTripStops,
   setTripStatus,
 } from "./db.js";
 import {
@@ -818,6 +819,30 @@ io.on("connection", (socket) => {
   });
 
   // Motorista encerra a viagem pelo app
+  // Ônibus recomeçou a linha sem encerrar a viagem. O roteiro de paradas volta
+  // ao início: sem isto a segunda volta apareceria com tudo já percorrido, e o
+  // passageiro que embarcasse nela veria as paradas à frente marcadas como
+  // vencidas.
+  socket.on("driver:lap", (...args) => {
+    const reply = ackOf(args);
+    const driverInfo = state.drivers.get(socket.id);
+    if (!driverInfo?.tripId) {
+      reply({ ok: false, error: "Nenhuma viagem em andamento" });
+      return;
+    }
+
+    clearTripStops(driverInfo.tripId);
+
+    const bus = state.buses.get(driverInfo.busId);
+    if (bus) {
+      state.buses.set(bus.id, { ...bus, reachedStops: [] });
+      io.emit("bus:stops-reset", { busId: bus.id, tripId: driverInfo.tripId });
+    }
+
+    reply({ ok: true });
+    console.log(`[viagem] ${bus?.plate || driverInfo.tripId.slice(0, 8)}: nova volta, roteiro reiniciado`);
+  });
+
   socket.on("driver:stop", (...args) => {
     finishDriver(socket.id, { graceful: true });
     ackOf(args)({ ok: true });

@@ -466,6 +466,15 @@ export function markStopReached(tripId, stop, reachedAt = new Date().toISOString
   return result.changes > 0;
 }
 
+/**
+ * Apaga as paradas registradas da viagem. Usado quando o ônibus recomeça a
+ * linha sem encerrar a viagem: a volta nova começa com o roteiro limpo, em vez
+ * de mostrar tudo como já percorrido.
+ */
+export function clearTripStops(tripId) {
+  return db.prepare("DELETE FROM trip_stops WHERE trip_id = ?").run(tripId).changes;
+}
+
 /** Paradas já alcançadas na viagem, na ordem em que foram atingidas. */
 export function getTripStops(tripId) {
   return db

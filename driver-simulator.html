@@ -347,6 +347,13 @@
         viagem.visitadas = new Set();
         viagem.volta++;
         $("vLap").textContent = viagem.volta;
+        // Zera o roteiro no servidor também: como a viagem continua a mesma, as
+        // paradas da volta anterior seguiriam marcadas para o passageiro.
+        socket.emit("driver:lap", {}, (resposta) => {
+          if (!resposta?.ok) return log(resposta?.error || "falha ao reiniciar o roteiro", "err");
+          viagem.registradas = 0;
+          $("vStops").textContent = "0";
+        });
         log("fim da linha, recomeçando (volta " + viagem.volta + ")");
       }
 

@@ -41,6 +41,11 @@ export function useAdminSocket() {
       );
     });
 
+    // Nova volta na mesma viagem: o roteiro de paradas recomeça do zero.
+    socket.on("bus:stops-reset", ({ busId }) => {
+      setBuses((prev) => prev.map((b) => (b.id === busId ? { ...b, reachedStops: [] } : b)));
+    });
+
     return () => socket.disconnect();
   }, []);
 

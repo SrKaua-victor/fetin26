@@ -51,6 +51,12 @@ export function useSocket() {
       );
     });
 
+    // O ônibus recomeçou a linha: o roteiro volta ao início em vez de ficar
+    // todo riscado para quem embarcar na volta nova.
+    socket.on("bus:stops-reset", ({ busId }) => {
+      setBuses((prev) => prev.map((b) => (b.id === busId ? { ...b, reachedStops: [] } : b)));
+    });
+
     return () => socket.disconnect();
   }, []);
 
